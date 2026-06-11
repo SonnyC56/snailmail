@@ -597,21 +597,49 @@ read the sine table**. Across all of `.text`, `0x4acf38`/`0x4ace50` are referenc
 `0x44ed64` — no indexed call/jump, no `mov` from `idx*4 + table`. The 57-vs-51
 match was coincidence.
 
-### The genuine open problem: an aliased struct
+### What the curve index actually does — and the formula we recovered
 
-Here is the honest unsolved piece. The curve index at `[seg+0x8bc]` is **written
-once** (at `0x4485b6`) and **read zero times through that offset**. The ~0x900-byte
-segment record is block-copied into the track-build struct, and the index is read
-back through a *different base register + displacement* (an **aliased struct**). So
-the per-type geometry generator — the real consumer of the curve index — is **not
-yet recovered as closed-form formulas**. The shapes are **procedural in code** (the
-`.TXT` only marks the `P`/`p` path footprint and the optional `Angle=` roll), not
-stored as data blobs. The next step is to Unicorn-trace the block-copy to map the
-destination struct and find the read of the copied index.
+The honest answer overturns the "single 51-way trig generator" premise: **there
+isn't one.** A deeper static trace (the index at `[seg+0x8bc]` is written once and
+relocated through a displacement-folded copy to `[seg+0x844]`, written once / read
+once at `0x436578`) shows the index drives **two** verified consumers, and the
+geometry is mostly **mesh/descriptor-driven** — the very model our grid-based
+reconstruction already uses.
 
-(Also corrected along the way: `0x429b00` is the track-**mesh** renderer — its args
-are texture paths like `Objects/Path/VeryDark.tga`, `Slide0.tga` — *not* curve
-generation, an earlier mis-identification.)
+**1. Mesh / descriptor selector.** `0x435e90` → `0x436cda` reads the relocated
+index and selects a per-curve descriptor at **`idx · 0x150 + base`** (`base` =
+`0xff2914` / `0xff29bc`, stride `0x150` verified). So the curve name **picks a
+pre-authored segment descriptor / mesh** — consistent with the parser loading
+`Segments/%s` files (`0x448140`). There is **no 51-entry parameter table**: curves
+are authored geometry selected by index, not synthesized from a per-type formula.
+
+**2. A procedural vertical "hill" bump — fully recovered.** The one real closed form
+is a raised-cosine vertical offset at `0x4462e6`, applied **only** for the 8-index
+gate **{8 HILL, 9 HILL4C, 10 HILL4, 14 SBEND, 16 HUMP, 36 START, 43 TWISTERA,
+45 TWISTER2A}** (every other curve → 0):
+
+```
+t    = clamp((riderPos − start) / length, 0, 1)
+vert = (0.5 − 0.5·cos(2π·t)) · 0.35                    # raised cosine, peak 0.35 @ t=0.5
+vert += (0.5 − 0.5·cos(angle·4.712389 + π/2)) · 0.24   # banking add-on (when angled)
+posY += vert · scale ;  posX += lat · 0.3333 ;  posZ += fwd + 0.4
+```
+
+Every constant is byte-verified (hill amp `0.35`@`0x49754c`, bank amp `0.24`@`0x4976a8`,
+2π@`0x49729c`, π/2@`0x497440`, `4.712389`@`0x4976ac`, step `1/120`=`0x3c088889`; trig via
+the `cos` wrapper `0x44cb50`, table `0x777f7c`). Note `0.5 − 0.5·cos(2π·t) ≡
+sin²(π·t)` — the **same `smoothBump` kernel our track uses**, an independent
+confirmation of the shaping math.
+
+**Still open (stated honestly).** The exact instruction that relocates the index
+`0x8bc → 0x844` (a displacement-folded `rep movs`, *not* the `0x4472e0` field-copy
+loop — that one stops one dword short, at `Angle 0x8b8 → 0x840`) is not yet pinned to
+an address. And the LOOP / VALLEY / HALFPIPE **spline-walker** trajectories advance a
+direction frame by `1/120` per step through engine matrices (`0x44d3e0` / `0x44d6b0` /
+`0x44dc60`) that dereference the *live* object graph, so they can't be emulated in
+isolation — their exact paths remain uncharacterized beyond that step-and-rotate
+structure. (Also corrected earlier: the prior session's "57-table generator" and the
+`0x429b00` "curve constructor" were both wrong — see above.)
 
 ### Level-data verification & the baker bug we found and fixed
 
@@ -795,14 +823,15 @@ Stack: **Three.js ^0.184.0**, **ws ^8.21.0** (runtime); **vite ^8.0.16**,
 
 ## Status / known gaps
 
-- **The per-type curve generator's closed forms are not yet recovered.** The
-  original stores curve shapes *procedurally in code* and reads the curve index
-  back through an aliased struct (see [the open
-  problem](#the-genuine-open-problem-an-aliased-struct)). Our families + C1
-  kernels are a faithful *reconstruction* of the recognizable shapes (loop, hill,
-  valley, slalom, corkscrew, invert, half-pipe), not a byte-exact port of the
-  original generator. The next RE step is to Unicorn-trace the segment-record
-  block-copy and map the destination struct.
+- **Curve geometry is mostly mesh/descriptor-driven — there is no single 51-way
+  formula.** We traced the index to a descriptor selector (`idx·0x150 + base`) and
+  recovered the one real procedural term — the raised-cosine vertical "hill" bump
+  and its exact 8-curve gate + constants (see [What the curve index actually
+  does](#what-the-curve-index-actually-does--and-the-formula-we-recovered)). Our
+  families + C1 kernels are a faithful *reconstruction* of the recognizable shapes
+  (loop, hill, valley, slalom, corkscrew, invert, half-pipe); the residual unknowns
+  are the exact index-relocation copy site and the live-object-graph spline-walker
+  trajectories (LOOP/VALLEY/HALFPIPE), which can't be emulated in isolation.
 - **Asset coverage.** A large slice of the extracted library is staged but not yet
   wired in (see `ASSET_AUDIT.md`): all weapon DRAW/FIRE frames, most of the
   111-line voice library, the damage/invincible Turbo skins, textured particle
