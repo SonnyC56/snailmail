@@ -33,6 +33,12 @@ export class AudioEngine {
     this.master = this.sfxGain = this.musicGain = this.voiceGain = null;
     this.muted = localStorage.getItem('snailx.muted') === '1';
     this.musicOn = localStorage.getItem('snailx.music') !== '0';
+    // per-bus volume levels (0..1), persisted; defaults near the original
+    // _VOICE.TXT Normalize values (music ~50, sfx ~70, voice 90).
+    const v = (k, d) => { const n = parseFloat(localStorage.getItem(k)); return Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : d; };
+    this.masterVol = v('snailx.vol.master', 1);
+    this.musicVol = v('snailx.vol.music', 0.45);
+    this.sfxVol = v('snailx.vol.sfx', 0.7);
     this._sfx = new Map();      // name -> AudioBuffer
     this._voiceList = null;     // [names]
     this._music = null;         // current music source
@@ -50,10 +56,10 @@ export class AudioEngine {
     assets.setAudioContext(this.ctx);
 
     this.master = this.ctx.createGain();
-    this.master.gain.value = this.muted ? 0 : 1;
+    this.master.gain.value = this.muted ? 0 : this.masterVol;
     this.master.connect(this.ctx.destination);
-    this.sfxGain = this.ctx.createGain(); this.sfxGain.gain.value = 0.7; this.sfxGain.connect(this.master);
-    this.musicGain = this.ctx.createGain(); this.musicGain.gain.value = this.musicOn ? 0.45 : 0; this.musicGain.connect(this.master);
+    this.sfxGain = this.ctx.createGain(); this.sfxGain.gain.value = this.sfxVol; this.sfxGain.connect(this.master);
+    this.musicGain = this.ctx.createGain(); this.musicGain.gain.value = this.musicOn ? this.musicVol : 0; this.musicGain.connect(this.master);
     this.voiceGain = this.ctx.createGain(); this.voiceGain.gain.value = 0.9; this.voiceGain.connect(this.master);
 
     const len = this.ctx.sampleRate;
@@ -81,7 +87,12 @@ export class AudioEngine {
   }
 
   toggleMute() { this.muted = !this.muted; localStorage.setItem('snailx.muted', this.muted ? '1' : '0'); if (this.master) this.master.gain.value = this.muted ? 0 : 1; return this.muted; }
-  toggleMusic() { this.musicOn = !this.musicOn; localStorage.setItem('snailx.music', this.musicOn ? '1' : '0'); if (this.musicGain) this.musicGain.gain.value = this.musicOn ? 0.45 : 0; return this.musicOn; }
+  toggleMusic() { this.musicOn = !this.musicOn; localStorage.setItem('snailx.music', this.musicOn ? '1' : '0'); if (this.musicGain) this.musicGain.gain.value = this.musicOn ? this.musicVol : 0; return this.musicOn; }
+
+  // ---- volume sliders (0..1) ---------------------------------------
+  setMasterVolume(x) { this.masterVol = Math.max(0, Math.min(1, x)); localStorage.setItem('snailx.vol.master', this.masterVol); if (this.master && !this.muted) this.master.gain.value = this.masterVol; return this.masterVol; }
+  setMusicVolume(x) { this.musicVol = Math.max(0, Math.min(1, x)); localStorage.setItem('snailx.vol.music', this.musicVol); this.musicOn = this.musicVol > 0; if (this.musicGain) this.musicGain.gain.value = this.musicVol; return this.musicVol; }
+  setSfxVolume(x) { this.sfxVol = Math.max(0, Math.min(1, x)); localStorage.setItem('snailx.vol.sfx', this.sfxVol); if (this.sfxGain) this.sfxGain.gain.value = this.sfxVol; return this.sfxVol; }
 
   // ---- playback primitives ----------------------------------------
   _playBuf(buf, gainNode, { vol = 1, rate = 1 } = {}) {

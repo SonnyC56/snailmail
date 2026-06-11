@@ -63,6 +63,9 @@ export class Screens {
     this.audio = audio;
     this.save = save;
     this.cb = {};
+    // the original menu pointer (SPRITES/MOUSE) — menus only; gameplay keeps the
+    // system cursor so steering stays precise.
+    getSpriteURL('SPRITES/MOUSE').then((u) => { if (u) this.root.style.cursor = `url(${u}) 3 3, auto`; });
   }
 
   on(events) { Object.assign(this.cb, events); return this; }
@@ -459,13 +462,35 @@ export class Screens {
     panel.innerHTML = `<h2>Options</h2>`;
     const list = document.createElement('div');
     list.className = 'menu-list';
-    const muteBtn = this._btn(`Sound: ${this.audio.muted ? 'OFF' : 'ON'}`, () => { const m = this.audio.toggleMute(); muteBtn.textContent = `Sound: ${m ? 'OFF' : 'ON'}`; });
-    const musicBtn = this._btn(`Music: ${this.audio.musicOn ? 'ON' : 'OFF'}`, () => { const m = this.audio.toggleMusic(); musicBtn.textContent = `Music: ${m ? 'ON' : 'OFF'}`; }, 'secondary');
-    const resetBtn = this._btn('Reset Progress', () => { if (confirm('Erase all progress and records?')) { this.save.reset(); alert('Progress reset.'); } }, 'secondary');
-    list.append(muteBtn, musicBtn, resetBtn);
+    const a = this.audio;
+    list.append(
+      this._volumeSlider('Master', () => a.masterVol, (v) => a.setMasterVolume(v)),
+      this._volumeSlider('Music', () => a.musicVol, (v) => a.setMusicVolume(v)),
+      this._volumeSlider('Sound FX', () => a.sfxVol, (v) => { a.setSfxVolume(v); a.click(); }),
+      this._btn('Reset Progress', () => { if (confirm('Erase all progress and records?')) { this.save.reset(); alert('Progress reset.'); } }, 'secondary'),
+    );
     panel.appendChild(list);
     panel.appendChild(this._row(this._btn('Back', () => this.showTitle(), 'small secondary')));
     inner.appendChild(panel);
+  }
+
+  /** A volume slider built from the original SLIDERBAR/SLIDERBARFULL art with
+   *  MORE/LESS sprite steppers (no green PLAY button — that was rejected). */
+  _volumeSlider(label, get, set) {
+    const row = document.createElement('div'); row.className = 'opt-slider-row';
+    const lab = document.createElement('div'); lab.className = 'opt-slider-label'; lab.textContent = label;
+    const track = document.createElement('div'); track.className = 'opt-slider-track';
+    const fill = document.createElement('div'); fill.className = 'opt-slider-fill'; track.appendChild(fill);
+    getSpriteURL('SPRITES/SLIDERBAR').then((u) => { if (u) track.style.backgroundImage = `url(${u})`; });
+    getSpriteURL('SPRITES/SLIDERBARFULL').then((u) => { if (u) fill.style.backgroundImage = `url(${u})`; });
+    const render = () => { fill.style.width = `${Math.round(get() * 100)}%`; };
+    const apply = (v) => { set(Math.max(0, Math.min(1, +v.toFixed(2)))); render(); };
+    const less = this._spriteBtn(BTN.less, '−', () => apply(get() - 0.1), { cls: 'opt-stepper', hoverPath: BTN.lessHover });
+    const more = this._spriteBtn(BTN.more, '+', () => apply(get() + 0.1), { cls: 'opt-stepper', hoverPath: BTN.moreHover });
+    track.addEventListener('click', (e) => { const r = track.getBoundingClientRect(); apply((e.clientX - r.left) / r.width); this.audio.click(); });
+    render();
+    row.append(lab, less, track, more);
+    return row;
   }
 
   // ---- help ----
