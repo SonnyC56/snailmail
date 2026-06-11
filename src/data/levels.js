@@ -14,6 +14,7 @@
  */
 
 import RAW from './arcadeLevels.json';
+import LEVEL_SEGMENTS from './levelSegments.json';
 import { rng } from '../utils.js';
 import { THEMES, themeForBackground } from './themes.js';
 import { buildLevelLayout, buildTutorialLayout, X_EDGE } from './segments.js';
@@ -47,7 +48,8 @@ function makeLevel(raw, galaxyIndex, levelIndex, globalIndex) {
   return {
     id: `g${galaxyIndex}-l${levelIndex}`,
     idx: raw.idx,
-    name: `Route ${raw.idx + 1}`,
+    // the level's real name from the original LEVELS data, not a generic label
+    name: (LEVEL_SEGMENTS[raw.idx] && LEVEL_SEGMENTS[raw.idx].name) || `Route ${raw.idx + 1}`,
     galaxyIndex, levelIndex, globalIndex,
     difficulty,
     // original tuning
