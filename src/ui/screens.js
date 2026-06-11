@@ -223,6 +223,7 @@ export class Screens {
       this._btn('Tutorial', () => this.cb.mode?.('tutorial')),
       this._btn('Story — Postal Route', () => this.cb.mode?.('story')),
       this._btn('Arcade — Score Attack', () => this.cb.mode?.('arcade'), 'secondary'),
+      this._btn('Challenge', () => this.cb.mode?.('challenge'), 'secondary'),
       this._btn('Time Trial', () => this.cb.mode?.('timetrial'), 'secondary'),
       this._btn('Endless — Procedural', () => this.cb.mode?.('procedural'), 'secondary'),
       this._btn('Online Race', () => this.cb.mode?.('multiplayer'), 'secondary'),

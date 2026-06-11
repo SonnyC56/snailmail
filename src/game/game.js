@@ -7,7 +7,7 @@
 import { Level, RunStatus } from './level.js';
 import { HUD } from '../ui/hud.js';
 import { Screens } from '../ui/screens.js';
-import { GALAXIES, getLevel, themeFor, allLevels, getTutorialLevel, TUTORIAL_STEPS, proceduralLevel } from '../data/levels.js';
+import { GALAXIES, getLevel, themeFor, allLevels, getTutorialLevel, TUTORIAL_STEPS, proceduralLevel, getChallengeLevel } from '../data/levels.js';
 import { TutorialGuide } from './tutorialGuide.js';
 import { storyFor } from '../data/story.js';
 import { PlayerState } from './player.js';
@@ -67,6 +67,7 @@ export class Game {
     if (mode === 'multiplayer') { this.startOnline(); return; }
     if (mode === 'tutorial') { this.startTutorial(); return; }
     if (mode === 'procedural') { this.startProcedural(0); return; }
+    if (mode === 'challenge') { this.startChallenge(); return; }
     this.mode = mode;
     this.state = State.MENU;
     this.screens.showLevelSelect(mode);
@@ -101,6 +102,21 @@ export class Game {
     this.level = new Level(this.ctx, level, 'tutorial', { lives: 5 });
     this.level.onEvent = (t, p) => this.onLevelEvent(t, p);
     this.tutorialGuide = new TutorialGuide(TUTORIAL_STEPS, this.ctx.audio);
+    this.ctx.audio.playMusic(themeFor(level).musicWorld ?? 0);
+    this.state = State.PLAYING;
+    this.screens.hide();
+  }
+
+  /** The original Challenge level — one fast, slug-heavy survival run. */
+  startChallenge() {
+    this._teardownLevel();
+    this.mode = 'challenge';
+    const level = getChallengeLevel();
+    this.current = { gi: 0, li: 0 };
+    this._wonHandled = this._lostHandled = false;
+    this.hud = new HUD(this.hudRoot);
+    this.level = new Level(this.ctx, level, 'challenge', { lives: 3 });
+    this.level.onEvent = (t, p) => this.onLevelEvent(t, p);
     this.ctx.audio.playMusic(themeFor(level).musicWorld ?? 0);
     this.state = State.PLAYING;
     this.screens.hide();

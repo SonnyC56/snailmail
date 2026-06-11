@@ -19,8 +19,27 @@ import { rng } from '../utils.js';
 import { THEMES, themeForBackground } from './themes.js';
 import { buildLevelLayout, buildTutorialLayout, X_EDGE } from './segments.js';
 import TUTORIAL from './tutorial.json';
+import CHALLENGE from './challenge.json';
 
 export const TUTORIAL_STEPS = TUTORIAL.steps;
+
+/** The original Challenge level (CHALLENGE000) as its own mode. Its segment
+ *  chain is baked into levelSegments.json under idx 100. */
+export function getChallengeLevel() {
+  const lenNum = parseInt(CHALLENGE.length, 10);
+  const length = (Number.isFinite(lenNum) ? 700 + lenNum * 1.4 : 1100);
+  return {
+    id: 'challenge', idx: CHALLENGE.idx, name: CHALLENGE.name || 'Challenge',
+    galaxyIndex: 0, levelIndex: 0, globalIndex: 0,
+    difficulty: 1,
+    speed: CHALLENGE.speed, parcels: CHALLENGE.parcels, quota: CHALLENGE.quota,
+    garbage: CHALLENGE.garbage, salt: CHALLENGE.salt,
+    background: CHALLENGE.background, track: CHALLENGE.track,
+    length, curviness: 0.55, hilliness: 0.45, gaps: 4,
+    seed: 7000, theme: themeKeyFor(CHALLENGE.background),
+    isChallenge: true,
+  };
+}
 
 /** The guided Tutorial level descriptor (its own mode). */
 export function getTutorialLevel() {
