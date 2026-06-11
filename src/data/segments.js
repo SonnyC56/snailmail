@@ -63,11 +63,23 @@ function pathFamily(type) {
   return 'flat';   // toad/supertramp/worm/warp/start/P0-2 → keep continuous road
 }
 /** Record a path segment as a spline feature or a roll feature. Deterministic
- *  (sign derived from `at`) so every client rebuilds the identical track. */
+ *  (sign derived from `at`) so every client rebuilds the identical track.
+ *
+ *  Roll features (corkscrew / invert / halfpipe) bank the flat ribbon about its
+ *  own tangent via Track._rollAt rather than bending the spline:
+ *   - corkscrew → a CONTINUOUS full 360° twist (cork:true): the road spirals all
+ *     the way over and lands upright at the exit.
+ *   - invert    → also a continuous 360° roll (cork:true): a turnover that rolls
+ *     through full inversion and returns upright over the feature length, rather
+ *     than tipping to 180° and back (which never actually carries you over).
+ *   - halfpipe  → a there-and-back BANK (cork:false): rolls up to ~52° at the
+ *     midpoint then settles smoothly back to flat (a U-shaped wall transition).
+ *  Track._rollAt eases the roll RATE from/to zero at both ends, so every one of
+ *  these is C1-continuous at the feature boundaries (no snap on/off). */
 function addPathFeature(paths, rolls, fam, at, len) {
   const sign = (Math.floor(at / 7) % 2) ? 1 : -1;
   if (fam === 'corkscrew') rolls.push({ at, len, deg: sign * 360, cork: true });
-  else if (fam === 'invert') rolls.push({ at, len, deg: 180, cork: false });
+  else if (fam === 'invert') rolls.push({ at, len, deg: sign * 360, cork: true });
   else if (fam === 'halfpipe') rolls.push({ at, len, deg: sign * 52, cork: false });
   else if (fam === 'loop' || fam === 'hill' || fam === 'valley' || fam === 'slalom') paths.push({ at, len, family: fam });
 }

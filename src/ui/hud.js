@@ -65,6 +65,12 @@ export class HUD {
       <!-- LIVES: bottom-left snail-shell icons -->
       <div class="hud-lives" id="hud-lives"></div>
 
+      <!-- Pause / menu button: discoverable on-screen control to open the
+           pause+quit menu without needing to know the Esc shortcut. -->
+      <button class="hud-pause-btn" id="hud-pause-btn" type="button" title="Pause / Menu" aria-label="Pause / Menu">
+        <span class="hud-pause-glyph"></span>
+      </button>
+
       <div class="hud-mp" id="hud-mp"></div>
       <div class="hud-message" id="hud-message"></div>
       <div class="hud-countdown hidden" id="hud-countdown"></div>
@@ -95,10 +101,18 @@ export class HUD {
       message: root.querySelector('#hud-message'),
       countdown: root.querySelector('#hud-countdown'),
       mp: root.querySelector('#hud-mp'),
+      pauseBtn: root.querySelector('#hud-pause-btn'),
     };
     this._lastLives = -1;
     this._lastWeapon = '';
     this._lifeUrl = null;   // resolved snail-shell life icon (PNG data URL)
+    this.onPause = null;    // host (Game) sets this to open the pause menu
+    if (this.el.pauseBtn) {
+      this.el.pauseBtn.addEventListener('click', (e) => { e.preventDefault(); this.onPause?.(); });
+      // don't let a tap on the button also steer/fire the snail underneath
+      this.el.pauseBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+      this.el.pauseBtn.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
+    }
     this._loadSprites();
   }
 

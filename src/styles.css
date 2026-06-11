@@ -139,6 +139,39 @@ html, body {
 }
 .hud-lives .life-icon.fallback { font-size: 30px; line-height: 34px; text-align: center; }
 
+/* On-screen pause / menu button: a discoverable control (top-right) so the
+   pause+quit menu is reachable without knowing the Esc shortcut. */
+.hud-pause-btn {
+  position: absolute;
+  top: 14px; right: 14px;
+  width: 44px; height: 44px;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0;
+  border: 2px solid rgba(255, 140, 26, 0.85);
+  border-radius: 10px;
+  background: rgba(8, 12, 24, 0.55);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+  pointer-events: auto;
+  z-index: 6;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.12s ease, transform 0.08s ease;
+}
+.hud-pause-btn:hover { background: rgba(255, 140, 26, 0.3); }
+.hud-pause-btn:active { transform: scale(0.92); }
+/* two bars = pause glyph */
+.hud-pause-glyph,
+.hud-pause-glyph::after {
+  content: '';
+  display: block;
+  width: 5px; height: 18px;
+  background: #ffd23a;
+  border-radius: 2px;
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.6);
+}
+.hud-pause-glyph { position: relative; }
+.hud-pause-glyph::after { position: absolute; left: 9px; top: 0; }
+
 /* --------------------------------------------------------------------------
    DAMAGE / POSTAL meter — original vertical DAMAGEGUAGE tube on the RIGHT side,
    beneath the score area with clear margin from the top edge. The bright

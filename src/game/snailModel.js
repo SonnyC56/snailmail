@@ -238,6 +238,7 @@ export function buildSnail(colors = SNAIL_COLORS) {
     geometries: new Map(),   // basename -> BufferGeometry
     material: null,          // shared textured material
     mesh: null,              // the single rendered THREE.Mesh (geometry swapped)
+    groundY: 0,              // grounding lift so the foot rests on the road (set in groundTurbo)
     pose: 'base',
     weaponLevel: -1,
     weaponMeshes: [],        // currently mounted weapon meshes
@@ -264,12 +265,6 @@ export function buildSnail(colors = SNAIL_COLORS) {
     }
     if (!firstGeo) return; // total failure → keep procedural Turbo
 
-    // Ground Turbo so his foot rests ON the track. The BASE bbox alone left him
-    // sinking ~0.4u into the road, so lift by a measured clearance margin.
-    const baseGeo = state.geometries.get('TURBO-BASE-000') || firstGeo;
-    baseGeo.computeBoundingBox();
-    turbo.position.y = -baseGeo.boundingBox.min.y * TURBO_SCALE + 0.62;
-
     // one shared textured material for the body
     const texName = (firstGeo.userData.texture || 'SNAIL-TURBO.TGA').replace(/\.[^.]+$/, '').toUpperCase();
     // Opaque body material — alphaTest was clipping the eye highlights and the
@@ -279,7 +274,8 @@ export function buildSnail(colors = SNAIL_COLORS) {
       side: THREE.DoubleSide,
     });
 
-    state.mesh = new THREE.Mesh(firstGeo, state.material);
+    const baseGeo = state.geometries.get('TURBO-BASE-000') || firstGeo;
+    state.mesh = new THREE.Mesh(baseGeo, state.material);
     turbo.add(state.mesh);
 
     state.loaded = true;
@@ -287,7 +283,44 @@ export function buildSnail(colors = SNAIL_COLORS) {
     proc.visible = false;       // hide the placeholder body
     procWeapon.visible = false; // hide the placeholder barrel (weapon mesh takes over)
     applyPoseFrame(0);
+
+    // Ground Turbo so his foot rests EXACTLY on the track. Measuring only the
+    // BASE bbox left a submesh below the measured low point (a brief float on
+    // load, then a snap below the road). Instead measure the FULL assembled,
+    // scaled model — every submesh of every loaded pose frame — and lift the
+    // group so the true lowest point sits at y=0. This is computed once at load.
+    groundTurbo();
+
     if (state.weaponLevel >= 0) mountWeapon(state.weaponLevel);
+  }
+
+  /** Lift `turbo` so the lowest point of the FULL assembled model rests exactly
+   *  on the road (y=0). The earlier code measured only the BASE pose's bounding
+   *  box, which excluded a submesh that dipped lower than the measured low point
+   *  — so Turbo floated for a frame on load and then snapped below the road. We
+   *  instead take the bound of the ENTIRE assembled, scaled object in world
+   *  space (Box3.setFromObject walks every submesh), then also clamp against the
+   *  lowest vertex of every preloaded pose frame so no later frame-swap pokes
+   *  through. Computed once at load → no float, no snap. */
+  function groundTurbo() {
+    // 1) lowest vertex across every loaded body-frame geometry (local space).
+    let minLocalY = Infinity;
+    for (const geo of state.geometries.values()) {
+      if (!geo.boundingBox) geo.computeBoundingBox();
+      if (geo.boundingBox && geo.boundingBox.min.y < minLocalY) minLocalY = geo.boundingBox.min.y;
+    }
+    // 2) full assembled bound in world space (captures the currently-shown mesh
+    //    plus the group scale exactly, including any submesh outside BASE).
+    turbo.position.y = 0;
+    turbo.updateMatrixWorld(true);
+    const worldMin = new THREE.Box3().setFromObject(turbo).min.y; // already scaled
+    // take whichever sits lower so nothing ever clips the road.
+    const lowest = Math.min(
+      Number.isFinite(minLocalY) ? minLocalY * TURBO_SCALE : Infinity,
+      Number.isFinite(worldMin) ? worldMin : Infinity,
+    );
+    state.groundY = Number.isFinite(lowest) ? -lowest : 0;
+    turbo.position.y = state.groundY;
   }
 
   /** Mount the original weapon mesh(es) for a weapon level onto the shell. */
@@ -455,9 +488,12 @@ export function buildSnail(colors = SNAIL_COLORS) {
             }
           }
         }
-        // subtle whole-body bob so motion reads even on a 2-frame swap
+        // subtle whole-body bob so motion reads even on a 2-frame swap. Apply it
+        // as an offset ON TOP of the grounding base (state.groundY) computed once
+        // at load — NOT as an absolute Y, or it would clobber the grounding lift
+        // and sink the foot into the road.
         const wiggle = Math.sin(t * 10) * 0.03 * (0.4 + speedNorm);
-        turbo.position.y = grounded ? Math.max(0, wiggle) : 0;
+        turbo.position.y = state.groundY + (grounded ? Math.max(0, wiggle) : 0);
       }
 
       // --- procedural placeholder (only visible until Turbo loads) ---

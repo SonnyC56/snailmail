@@ -20,9 +20,18 @@ const SEG_DIR = join(ROOT, 'extracted', 'SEGMENTS');
 const LVL_DIR = join(ROOT, 'extracted', 'LEVELS');
 const OUT_DIR = join(ROOT, 'src', 'data');
 
-/** Normalise a segment file name to a lookup key: upper-case, no .txt, trimmed. */
+/** Normalise a segment file name to a lookup key: upper-case, no .txt, trimmed.
+ *  Strips any trailing per-instance annotation too (e.g. "Worm.txt Angle=-360"
+ *  -> "WORM"), so annotated segment lines resolve to the same key as the file. */
 function segKey(name) {
-  return name.replace(/\.txt\s*$/i, '').trim().toUpperCase();
+  return name.replace(/\.txt.*$/i, '').trim().toUpperCase();
+}
+
+/** Pull the per-instance roll magnitude from a segment line, e.g.
+ *  "Invert.txt Angle=-180" -> -180. Returns null when unannotated. */
+function parseAngle(line) {
+  const m = line.match(/Angle\s*=\s*(-?\d+(?:\.\d+)?)/i);
+  return m ? parseFloat(m[1]) : null;
 }
 
 // ---- segments -------------------------------------------------------------
@@ -61,7 +70,7 @@ for (const file of readdirSync(SEG_DIR)) {
 // ---- levels ---------------------------------------------------------------
 
 function parseLevelFile(text) {
-  const out = { name: '', random: false, length: 'auto', segments: [], first: null, last: null };
+  const out = { name: '', random: false, length: 'auto', segments: [], segAngles: [], first: null, firstAngle: null, last: null, lastAngle: null };
   const lines = text.split(/\r?\n/);
 
   const nameM = text.match(/Name:\s*'?([^'\r\n]*)'?/i);
@@ -82,22 +91,25 @@ function parseLevelFile(text) {
     for (let i = begin; i < end; i++) {
       let l = clean(lines[i]).replace(/Segments Begin:/i, '');
       l = l.trim();
-      if (/\.txt$/i.test(l)) out.segments.push(segKey(l));
+      // match ANY line carrying a .txt segment reference — including those with
+      // a trailing "Angle=" annotation (previously dropped by a $-anchored test,
+      // which silently lost every WORM/INVERT/SCREW/angled-WIBBLE section).
+      if (/\.txt/i.test(l)) { out.segments.push(segKey(l)); out.segAngles.push(parseAngle(l)); }
     }
   }
 
   // First: / Last: single segments (each followed by a segment filename line)
   const grabAfter = (label) => {
     const idx = lines.findIndex((l) => new RegExp(label + ':', 'i').test(l));
-    if (idx < 0) return null;
+    if (idx < 0) return { key: null, angle: null };
     for (let i = idx; i < Math.min(idx + 4, lines.length); i++) {
       let l = clean(lines[i]).replace(new RegExp(label + ':', 'i'), '').trim();
-      if (/\.txt$/i.test(l)) return segKey(l);
+      if (/\.txt/i.test(l)) return { key: segKey(l), angle: parseAngle(l) };
     }
-    return null;
+    return { key: null, angle: null };
   };
-  out.first = grabAfter('First');
-  out.last = grabAfter('Last');
+  const f = grabAfter('First'); out.first = f.key; out.firstAngle = f.angle;
+  const la = grabAfter('Last'); out.last = la.key; out.lastAngle = la.angle;
   return out;
 }
 

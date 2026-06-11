@@ -37,6 +37,39 @@ const GRID_CELL_HALF = GRID_X_EDGE / GRID_LANE_HALF / 2; // half a lane's x-widt
 function gridColToX(c) { return ((c - GRID_LANE_HALF) / GRID_LANE_HALF) * GRID_X_EDGE; }
 function gridXToCol(x) { return Math.round((x / GRID_X_EDGE) * GRID_LANE_HALF + GRID_LANE_HALF); }
 
+// ------------------------------------------------------------------
+// Smooth parametric shaping kernels (u in 0..1 through a feature).
+//
+// The original encoded each curve with sin-table parametric evaluators; these
+// are their kink-free analogues. The key property for every authored feature is
+// C1 continuity at the feature boundaries: BOTH the offset value AND its rate of
+// change must vanish at u=0 and u=1 so the shaped spline meets the procedural
+// baseline with no corner (a "kink") at entry/exit.
+const PI = Math.PI;
+const TWO_PI = 2 * Math.PI;
+// 5th-order smoothstep: 0->1 monotone with zero 1st & 2nd derivative at both
+// ends. Used to ramp a value in cleanly (loop revolution, continuous roll).
+function smootherStep(u) {
+  if (u <= 0) return 0;
+  if (u >= 1) return 1;
+  return u * u * u * (u * (u * 6 - 15) + 10);
+}
+// Single-lobe bump: 0 at the ends, +1 at the centre, flat (zero rate) at both
+// ends. Used for half-pipe / invert there-and-back banking and the loop's
+// lateral bow. sin^2(pi*u) == (1 - cos(2*pi*u))/2.
+function smoothBump(u) {
+  const s = Math.sin(PI * u);
+  return s * s;
+}
+// Windowed S-wave: `cycles` full sine cycles across the feature, windowed by
+// smoothBump so the value AND its rate vanish at both ends (no boundary kinks)
+// and the net integral is zero (returns to the baseline heading/grade, no
+// drift). cycles=1 is a single up/down (hill, valley); higher counts weave more
+// (long slaloms). Any whole number of cycles keeps the net integral at zero.
+function smoothSWave(u, cycles = 1) {
+  return Math.sin(cycles * TWO_PI * u) * smoothBump(u);
+}
+
 export class Track {
   /**
    * @param {object} def
@@ -126,16 +159,35 @@ export class Track {
       const pf = paths.find((p) => s >= p.at && s < p.at + p.len);
       if (pf) {
         const u = (s - pf.at) / pf.len;             // 0..1 through the feature
-        if (pf.family === 'loop') {                                      // full vertical loop
-          bp += 2 * Math.PI * u;
-          // bow the loop sideways so it advances laterally and doesn't stack
-          // back on top of the entry/exit (a self-overlapping in-place circle).
+        if (pf.family === 'loop') {
+          // Full vertical loop: ramp a clean 2*pi of extra pitch via a 5th-order
+          // smoothstep, so the road rises, inverts, and returns to grade with the
+          // pitch RATE easing from/to zero at the boundaries (C1-continuous, no
+          // kink). At u=1 the added pitch is exactly 2*pi -> the heading wraps
+          // back to the entry grade, no leftover tilt.
+          bp += TWO_PI * smootherStep(u);
+          // Bow the loop sideways so it advances laterally instead of stacking a
+          // circle back over its own entry/exit (a self-overlapping in-place
+          // loop). The bow is a single smooth lobe: zero offset and zero rate at
+          // both ends, peak in the middle. Direction alternates deterministically
+          // per loop so successive loops lean to opposite sides.
           const dir = (Math.floor(pf.at / 11) % 2) ? 1 : -1;
-          by += dir * 0.9 * Math.sin(Math.PI * u);
+          by += dir * 0.9 * smoothBump(u);
         }
-        else if (pf.family === 'hill') bp += 0.75 * Math.sin(2 * Math.PI * u);   // up then down
-        else if (pf.family === 'valley') bp -= 0.75 * Math.sin(2 * Math.PI * u); // down then up
-        else if (pf.family === 'slalom') by += 0.6 * Math.sin(4 * Math.PI * u);  // S-weave
+        // Hills/valleys: a smooth vertical arc that climbs (or dips) then returns
+        // exactly to grade. The windowed S-wave gives net-zero pitch integral
+        // (height returns to baseline) with zero rate at the ends.
+        else if (pf.family === 'hill') bp += 0.75 * smoothSWave(u);
+        else if (pf.family === 'valley') bp -= 0.75 * smoothSWave(u);
+        // Slalom: a smooth alternating lateral S in yaw — net-zero heading
+        // change, no kink at entry/exit. Longer features weave through more
+        // cycles (~one full S per 90 units) so a short chicane reads as a single
+        // swerve while a long slalom snakes; always a whole number of cycles so
+        // the heading still returns exactly to baseline.
+        else if (pf.family === 'slalom') {
+          const cycles = Math.max(1, Math.round(pf.len / 90));
+          by += 0.6 * smoothSWave(u, cycles);
+        }
       }
       const dir = new THREE.Vector3(Math.sin(by) * Math.cos(bp), Math.sin(bp), -Math.cos(by) * Math.cos(bp));
       cur.addScaledVector(dir, step);
@@ -146,16 +198,24 @@ export class Track {
     this.length = this.curve.getLength();
   }
 
-  /** Roll angle (radians) applied at arc length s — sum of banked segments. */
+  /** Roll angle (radians) applied at arc length s — sum of banked segments.
+   *  Both roll modes are C1-continuous at the segment boundaries (the roll rate
+   *  eases from/to zero at the ends) so the banking never snaps on or off:
+   *   - cork=true  → a CONTINUOUS twist that ramps a full `deg` of roll across
+   *     the feature via a 5th-order smoothstep (corkscrews / inverts that spin
+   *     the road over and back upright when deg is a multiple of 360).
+   *   - cork=false → a there-and-back BANK: rolls in to `deg` at the midpoint and
+   *     settles smoothly back to flat (half-pipes, banked turns, 180° turnovers
+   *     that return upright). */
   _rollAt(s) {
     let roll = 0;
     for (const r of this.rolls) {
       const end = r.at + r.len;
       if (s <= r.at || s >= end) continue;
       const u = (s - r.at) / r.len;          // 0..1 across the segment
-      const env = Math.sin(u * Math.PI);     // ease in/out, 0 at the ends
-      if (r.cork) roll += THREE.MathUtils.degToRad(r.deg) * u; // continuous twist
-      else roll += THREE.MathUtils.degToRad(r.deg) * env;       // bank and return
+      const deg = THREE.MathUtils.degToRad(r.deg);
+      if (r.cork) roll += deg * smootherStep(u); // continuous twist, eased ends
+      else roll += deg * smoothBump(u);          // bank in to deg, settle to flat
     }
     return roll;
   }

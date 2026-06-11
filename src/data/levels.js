@@ -16,7 +16,7 @@
 import RAW from './arcadeLevels.json';
 import LEVEL_SEGMENTS from './levelSegments.json';
 import { rng } from '../utils.js';
-import { THEMES, themeForBackground } from './themes.js';
+import { THEMES, themeForBackground, trackTexFor, slideTexFor } from './themes.js';
 import { buildLevelLayout, buildTutorialLayout, X_EDGE } from './segments.js';
 import TUTORIAL from './tutorial.json';
 import CHALLENGE from './challenge.json';
@@ -41,13 +41,16 @@ export function getChallengeLevel() {
   };
 }
 
-/** The guided Tutorial level descriptor (its own mode). */
+/** The guided Tutorial level descriptor (its own mode). The original
+ *  TUTORIAL.TXT specifies Background:SpaceRed and Track:0, so use the SpaceRed
+ *  backdrop with the TRACK0 road skin (decoupled from the environment theme). */
 export function getTutorialLevel() {
   return {
     id: 'tutorial', idx: -1, name: 'Tutorial', galaxyIndex: 0, levelIndex: 0,
     difficulty: 0, speed: 22, parcels: 3, quota: 0, garbage: 0, salt: 0,
-    background: 'SPACEGREENWARP', track: 0, length: TUTORIAL.totalLen,
-    curviness: 0.18, hilliness: 0.12, gaps: 0, seed: 999, theme: 'meadow',
+    background: 'SpaceRed', track: 0, length: TUTORIAL.totalLen,
+    curviness: 0.18, hilliness: 0.12, gaps: 0, seed: 999,
+    theme: themeKeyFor('SpaceRed'),
     isTutorial: true,
   };
 }
@@ -142,6 +145,18 @@ export function getLevel(galaxyIndex, levelIndex) {
 export function levelByGlobal(i) { return allLevels()[i] ?? null; }
 
 export function themeFor(level) { return THEMES[level.theme] || THEMES.cosmic; }
+
+/** Theme for a level, but with the ROAD SKIN swapped to the level's real
+ *  Track index (0..3). The environment theme decides the backdrop/palette;
+ *  the level's own Track field decides which of the four road textures is
+ *  painted on the highway — the two are decoupled, as in the original data. */
+export function themeForLevel(level) {
+  const base = themeFor(level);
+  const tex = trackTexFor(level.track);
+  const slide = slideTexFor(level.track);
+  if (base.trackTex === tex && base.slideTex === slide) return base;
+  return { ...base, trackTex: tex, slideTex: slide };
+}
 
 // ----------------------------------------------------------------------
 // REAL segment-driven layout (Story / Arcade). The original level's chained

@@ -83,7 +83,7 @@ export class Game {
     const level = proceduralLevel({ idx, seed: 9000 + idx * 131 });
     this.current = { gi: 0, li: idx };
     this._wonHandled = this._lostHandled = false;
-    this.hud = new HUD(this.hudRoot);
+    this.hud = this._newHud();
     this.level = new Level(this.ctx, level, 'procedural', { lives: 3 });
     this.level.onEvent = (t, p) => this.onLevelEvent(t, p);
     this.ctx.audio.playMusic(themeFor(level).musicWorld ?? 0);
@@ -98,7 +98,7 @@ export class Game {
     const level = getTutorialLevel();
     this.current = { gi: 0, li: 0 };
     this._wonHandled = this._lostHandled = false;
-    this.hud = new HUD(this.hudRoot);
+    this.hud = this._newHud();
     this.level = new Level(this.ctx, level, 'tutorial', { lives: 5 });
     this.level.onEvent = (t, p) => this.onLevelEvent(t, p);
     this.tutorialGuide = new TutorialGuide(TUTORIAL_STEPS, this.ctx.audio);
@@ -114,7 +114,7 @@ export class Game {
     const level = getChallengeLevel();
     this.current = { gi: 0, li: 0 };
     this._wonHandled = this._lostHandled = false;
-    this.hud = new HUD(this.hudRoot);
+    this.hud = this._newHud();
     this.level = new Level(this.ctx, level, 'challenge', { lives: 3 });
     this.level.onEvent = (t, p) => this.onLevelEvent(t, p);
     this.ctx.audio.playMusic(themeFor(level).musicWorld ?? 0);
@@ -152,7 +152,7 @@ export class Game {
     this.current = { gi, li };
     this._wonHandled = this._lostHandled = false;
 
-    this.hud = new HUD(this.hudRoot);
+    this.hud = this._newHud();
     this.level = new Level(this.ctx, level, this.mode);
     this.level.onEvent = (t, p) => this.onLevelEvent(t, p);
 
@@ -169,13 +169,21 @@ export class Game {
     this.mode = 'multiplayer';
     this.current = { gi: level.galaxyIndex, li: level.levelIndex };
     this._wonHandled = this._lostHandled = false;
-    this.hud = new HUD(this.hudRoot);
+    this.hud = this._newHud();
     this.level = new Level(this.ctx, level, 'multiplayer', { lives: 99 });
     this.level.onEvent = (t, p) => this.onLevelEvent(t, p);
     this.ctx.audio.playMusic(themeFor(level).musicWorld ?? 0);
     this.state = State.PLAYING;
     this.screens.hide();
     this.online?.attachLevel(this.level);
+  }
+
+  /** Create the in-race HUD and wire its on-screen pause button to the same
+   *  pause flow as the Esc key, so the menu is reachable without the shortcut. */
+  _newHud() {
+    const hud = new HUD(this.hudRoot);
+    hud.onPause = () => { if (this.state === State.PLAYING) this.pause(); else if (this.state === State.PAUSED) this.resume(); };
+    return hud;
   }
 
   _teardownLevel() {

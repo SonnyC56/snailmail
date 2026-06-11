@@ -18,7 +18,7 @@ import { WeaponSystem } from './weapons.js';
 import { ChaseCamera } from './camera.js';
 import { ParticleFX } from './fx.js';
 import { clamp } from '../utils.js';
-import { trackDefForLevel, entitiesForLevel, themeFor } from '../data/levels.js';
+import { trackDefForLevel, entitiesForLevel, themeFor, themeForLevel } from '../data/levels.js';
 
 export const RunStatus = {
   COUNTDOWN: 'countdown',
@@ -41,12 +41,16 @@ export class Level {
     this.level = level;
     this.mode = mode;
     this.theme = themeFor(level);
+    // The road skin is the level's real Track index (0..3), decoupled from the
+    // environment theme/backdrop — the same level can ride any of the four road
+    // textures regardless of which world's palette its backdrop belongs to.
+    this.roadTheme = themeForLevel(level);
 
     this.root = new THREE.Group();
     ctx.scene.add(this.root);
 
     this.track = new Track(trackDefForLevel(level));
-    this.trackMesh = this.track.buildMesh(this.theme);
+    this.trackMesh = this.track.buildMesh(this.roadTheme);
     this.root.add(this.trackMesh);
 
     this.env = new Environment(ctx.scene, this.theme, this.track, level.seed);

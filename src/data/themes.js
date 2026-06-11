@@ -12,6 +12,32 @@ const BG_THEME = {
 };
 export function themeForBackground(bg) { return BG_THEME[bg] || 'cosmic'; }
 
+// Per-level road skin (the original LEVELS *.TXT "Track:0..3" field) → the
+// four authored road textures. This is DECOUPLED from the environment theme:
+// a level picks its backdrop (Background:) and its road skin (Track:)
+// independently, exactly like the original data. Falls back to TRACK0.
+export const TRACK_SKINS = [
+  'OBJECTS/WORLD00/TRACK0',
+  'OBJECTS/WORLD00/TRACK1',
+  'OBJECTS/WORLD00/TRACK2',
+  'OBJECTS/WORLD00/TRACK3',
+];
+export const SLIDE_SKINS = [
+  'OBJECTS/WORLD00/SLIDE0',
+  'OBJECTS/WORLD00/SLIDE1',
+  'OBJECTS/WORLD00/SLIDE2',
+  'OBJECTS/WORLD00/SLIDE3',
+];
+/** Resolve a level's road texture from its Track index (0..3). */
+export function trackTexFor(trackIndex) {
+  const i = Number.isFinite(trackIndex) ? ((trackIndex % 4) + 4) % 4 : 0;
+  return TRACK_SKINS[i];
+}
+export function slideTexFor(trackIndex) {
+  const i = Number.isFinite(trackIndex) ? ((trackIndex % 4) + 4) % 4 : 0;
+  return SLIDE_SKINS[i];
+}
+
 export const THEMES = {
   meadow: {
     name: 'Meadow World',
