@@ -231,12 +231,14 @@ export class Game {
     if (input.mutePressed) this.ctx.audio.toggleMute();
 
     if (this.state === State.PLAYING) {
-      if (input.pausePressed) { this.pause(); return; }
+      // consume the pause edge — the fixed-timestep loop runs update() ~twice per
+      // render frame, so leaving the flag set would pause then instantly resume.
+      if (input.pausePressed) { input.pausePressed = false; this.pause(); return; }
       this.level.update(dt, input);
       if (this.online) this.online.update(dt, this.level);
       if (this.tutorialGuide) this.tutorialGuide.update(this.level.player.s, dt);
     } else if (this.state === State.PAUSED) {
-      if (input.pausePressed) this.resume();
+      if (input.pausePressed) { input.pausePressed = false; this.resume(); }
     }
     this._syncCursor();
   }

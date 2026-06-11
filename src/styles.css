@@ -954,27 +954,6 @@ html, body {
 }
 .btn-label { position: relative; z-index: 1; }
 
-/* Original menu-hover font icon (FONT-MENU-HOVER strip) revealed on hover/focus:
-   a little galaxy/snail/star glyph that pops in beside the focused menu item. */
-.btn-hover-icon {
-  position: absolute;
-  top: 50%;
-  left: 10px;
-  width: 26px;
-  height: 26px;
-  transform: translateY(-50%) scale(0.4);
-  background-repeat: no-repeat;
-  background-position: center;
-  filter: drop-shadow(0 0 6px rgba(255, 240, 200, 0.85));
-  opacity: 0;
-  transition: opacity 0.14s ease, transform 0.14s ease;
-  pointer-events: none;
-  z-index: 0;
-}
-.btn-hover-icon:not(.has-sprite) { display: none; }
-.btn:hover .btn-hover-icon.has-sprite,
-.btn:focus-visible .btn-hover-icon.has-sprite { opacity: 1; transform: translateY(-50%) scale(1); }
-
 .btn:hover, .btn:focus-visible { filter: brightness(1.1); transform: translateY(-2px); box-shadow: 0 7px 0 #8a4d12, 0 10px 16px rgba(0,0,0,0.35); }
 .btn:active { transform: translateY(3px); box-shadow: 0 2px 0 #8a4d12; }
 

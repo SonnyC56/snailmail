@@ -565,9 +565,12 @@ export class Track {
     // of a ledge (where the road falls away) — so you can ride off the edge and
     // fall there instead of being channelled cleanly around the hole.
     const barrierTex = assets.texture('OBJECTS/BARRIER/BARRIER', { wrap: true });
+    // ADDITIVE so the barrier reads as a glowing blue slipstream wall: the
+    // texture's black areas add nothing (clear), the lit areas glow blue. (Normal
+    // blending showed the texture's black background as solid black bars.)
     const wallMat = new THREE.MeshBasicMaterial({
-      map: barrierTex, color: 0xbfe0ff, transparent: true, opacity: 0.92,
-      side: THREE.DoubleSide, depthWrite: false,
+      map: barrierTex, color: 0x6ab4ff, transparent: true, opacity: 0.85,
+      side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending,
     });
     const WALL_H = 1.15;
     for (const which of ['min', 'max']) {

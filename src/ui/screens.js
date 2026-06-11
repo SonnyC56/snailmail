@@ -45,12 +45,6 @@ const GALAXY_SELECT = 'GALAXY/GALAXYSELECT'; // blue selection ring (128x128)
 const LEVEL_SELECT = 'GALAXY/LEVELSELECT';   // blue ring for an individual level/star (64x64)
 const LINESTAR = 'GALAXY/LINESTAR';          // 8x8 soft star dot — the route connector sprite
 const BORDERSPACEMAP = 'GALAXY/BORDERSPACEMAP'; // 128x128 rounded blue frame tile for the map view
-// Original menu-hover font art: a 2048x64 strip whose rightmost ~15% holds a row
-// of colourful menu icons (snail, galaxy, star, jetpack…). We reveal that icon
-// region as the hover treatment behind/beside a focused menu button.
-const FONT_MENU_HOVER = 'OBJECTS/FONT/FONT-MENU-HOVER';
-const FONT_MENU_HOVER0 = 'OBJECTS/FONT/FONT-MENU-HOVER0';
-const FONT_MENU_HOVER1 = 'OBJECTS/FONT/FONT-MENU-HOVER1';
 // 3D letter font atlas (FONT3D/LETTER) — a chunky serif capital used as a
 // decorative drop-cap beside the route-map heading.
 const FONT3D_LETTER = 'OBJECTS/FONT3D/LETTER';
@@ -65,12 +59,10 @@ const GALAXY_NODES = [
   { x: 50, y: 58 }, { x: 30, y: 60 },
 ];
 
-// Warm the most-used plates so the title/menu paint without a flash. We also
-// warm the menu-hover font strip (so the first button hover reveals its icon
-// instantly) and the star-map's LINESTAR / BORDERSPACEMAP / 3D-letter art.
+// Warm the most-used plates so the title/menu paint without a flash, plus the
+// star-map's LINESTAR / BORDERSPACEMAP / 3D-letter art.
 preloadSprites([
   ART.splashA, ART.splashB, ART.menuA, ART.menuB, ART.starmap,
-  FONT_MENU_HOVER, FONT_MENU_HOVER0, FONT_MENU_HOVER1,
   LINESTAR, BORDERSPACEMAP, FONT3D_LETTER,
 ]);
 
@@ -134,43 +126,9 @@ export class Screens {
     text.className = 'btn-label';
     text.textContent = label;
     b.appendChild(text);
-    // Original menu-hover font art (FONT-MENU-HOVER): the rightmost end of the
-    // 2048x64 strip is a row of little menu icons. We reveal one of them as a
-    // glowing badge on the focused/hovered button (different icon per button) —
-    // the original game's menu-hover decoration, restored.
-    this._attachHoverFont(b);
     b.addEventListener('click', () => { this.audio.click(); onClick(); });
     b.addEventListener('mouseenter', () => this.audio.highlight());
     return b;
-  }
-
-  /**
-   * Attach the original FONT-MENU-HOVER icon strip as a hover badge. The strip
-   * holds ~9 menu icons clustered in its rightmost region (x≈1700..2010 of 2048);
-   * we crop to one icon cell via background-size/position and reveal it on hover.
-   * Each call advances the cell so consecutive menu items show distinct icons.
-   */
-  _attachHoverFont(b) {
-    const ICON_N = 9;                 // icons in the right-hand cluster
-    const cell = this._hoverFontIdx = ((this._hoverFontIdx ?? -1) + 1);
-    const badge = document.createElement('span');
-    badge.className = 'btn-hover-icon';
-    b.insertBefore(badge, b.firstChild);
-    getSpriteURL(FONT_MENU_HOVER).then((url) => {
-      if (!url || !badge.isConnected) return;
-      // Strip is 2048x64; the colourful icon cluster spans x≈1634..1937. Map
-      // each icon cell to a background-position so one glyph fills the badge.
-      const STRIP_W = 2048, CLUSTER_X = 1634, CLUSTER_W = 306;
-      const stepW = CLUSTER_W / ICON_N;            // px width of one icon cell
-      const x = CLUSTER_X + (cell % ICON_N) * stepW;
-      // background-size scaled so the icon cell maps onto the badge square.
-      const scale = `${(STRIP_W / stepW) * 100}% auto`;
-      const posX = (x / (STRIP_W - stepW)) * 100;
-      badge.style.backgroundImage = `url(${url})`;
-      badge.style.backgroundSize = scale;
-      badge.style.backgroundPosition = `${posX}% 50%`;
-      badge.classList.add('has-sprite');
-    });
   }
 
   /** Original green PLAY sprite as a real button, with a text fallback. */

@@ -67,7 +67,17 @@ out.arcade = await p.evaluate(() => {
   return { status: lv?.status, len: Math.round(lv?.track?.length ?? 0), pkgs: lv?.entities?.countTotal?.('package') ?? 0, notFalling: lv?.player?.state !== 'falling' };
 });
 
+// 4) Pause: Escape must pause AND stay paused (regression: the fixed-timestep
+//    loop ran update twice per frame and instantly un-paused).
+const before = await p.evaluate(() => window.__snail.game.state);
+await p.keyboard.press('Escape'); await sleep(350);
+const after = await p.evaluate(() => window.__snail.game.state);
+await sleep(350);
+const still = await p.evaluate(() => window.__snail.game.state);
+out.pause = { before, after, still, ok: after !== before && after === still };
+
 console.log('MENUS    ', JSON.stringify(out.menus));
+console.log('PAUSE    ', JSON.stringify(out.pause));
 console.log('TUTORIAL ', JSON.stringify(out.tutorial));
 console.log('ENDLESS  ', JSON.stringify(out.endless));
 console.log('ARCADE   ', JSON.stringify(out.arcade));
@@ -77,7 +87,8 @@ console.log('ERRORS', errs.length, JSON.stringify(errs.slice(0, 6)));
 const ok = (s) => s === 'playing' || s === 'countdown';   // both = loaded + running, no crash
 const pass = !errs.length && !hd404.size && !failed.length &&
   ok(out.tutorial.status) && ok(out.arcade.status) && ok(out.endless.status) &&
-  out.tutorial.notFalling && out.arcade.notFalling && out.endless.notFalling;
+  out.tutorial.notFalling && out.arcade.notFalling && out.endless.notFalling &&
+  out.pause.ok;
 console.log(pass ? '\nSMOKE: PASS ✅' : '\nSMOKE: FAIL ❌');
 await b.close();
 process.exit(pass ? 0 : 1);

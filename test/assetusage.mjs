@@ -51,6 +51,9 @@ const EXCLUDE = {
   'SPRITES/MOREMASK.TGA': 'alpha-composite mask for the MORE button (input, not a standalone sprite)',
   'SPRITES/SLUGMASK.TGA': 'alpha-composite mask for the slug sprite (input, not a standalone sprite)',
   'X/TURBOHOTSPOTS.X2': 'weapon-mount anchor-point metadata, not a renderable mesh',
+  'OBJECTS/FONT/FONT-MENU-HOVER.TGA': 'menu-hover icon strip — removed per user feedback (wrong as a hover badge)',
+  'OBJECTS/FONT/FONT-MENU-HOVER0.TGA': 'menu-hover icon strip variant — removed per user feedback',
+  'OBJECTS/FONT/FONT-MENU-HOVER1.TGA': 'menu-hover icon strip variant — removed per user feedback',
 };
 
 const unexpected = unused.filter((u) => !(u in EXCLUDE));
