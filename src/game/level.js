@@ -395,6 +395,14 @@ export class Level {
       case RunStatus.LOST: this._updateEnd(dt); break;
     }
     this.fx.update(dt);
+    // Endless mode bonus: slowly drift the road + sky colour over the run so a
+    // long procedural session visibly evolves.
+    if (this.mode === 'procedural') {
+      this._driftT = (this._driftT || 0) + dt;
+      const phase = this._driftT / 100;        // one full hue cycle ~100s
+      this.env?.setEndlessDrift?.(phase);
+      this.track?.setEndlessDrift?.(phase);
+    }
   }
 
   _updateCountdown(dt) {

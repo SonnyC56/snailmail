@@ -356,11 +356,21 @@ export class Track {
     // grid levels: build the road from the real per-cell grid (chicanes,
     // narrowing, holes and gaps come straight from the source). Procedural
     // levels use the continuous ribbon.
-    group.add(this.cells ? this._buildGridRoad(theme) : this._buildRibbon(theme));
+    const road = this.cells ? this._buildGridRoad(theme) : this._buildRibbon(theme);
+    this._roadMat = road.material;          // kept for the endless-mode colour drift
+    group.add(road);
     group.add(this._buildEdges(theme));
     const warnings = this._buildGapWarnings(theme);
     if (warnings) group.add(warnings);
     return group;
+  }
+
+  /** Endless mode: wash the road colour through a hue cycle so a long run keeps
+   *  changing. `phase` in [0,1) is one rotation; subtle so the track still reads. */
+  setEndlessDrift(phase) {
+    if (!this._roadMat || !this._roadMat.color) return;
+    const p = ((phase % 1) + 1) % 1;
+    this._roadMat.color.setHSL(p, 0.30, 0.78);
   }
 
   /**

@@ -282,6 +282,15 @@ export class Environment {
     for (const s of this._spinners) s.obj.rotation.y += s.speed * dt;
   }
 
+  /** Endless mode: slowly wash the sky + fog through a hue cycle so a long run
+   *  visibly evolves. `phase` in [0,1) is one full rotation. Subtle (low sat /
+   *  high lightness) so the nebula art still reads. */
+  setEndlessDrift(phase) {
+    const p = ((phase % 1) + 1) % 1;
+    if (this.sky && this.sky.material && this.sky.material.color) this.sky.material.color.setHSL(p, 0.28, 0.72);
+    if (this.scene.fog) this.scene.fog.color.setHSL(p, 0.32, 0.30);
+  }
+
   dispose() {
     this.scene.remove(this.group);
     this.scene.fog = null;
