@@ -33,6 +33,13 @@
   </div>
 
   <script>
+    // Use the upscaled HD texture pack (public/assets-hd/*.png, built with
+    // tools/upres_textures.py). Per-texture fallback to the original extracted
+    // TGA if a PNG is missing (see src/assets.js). Remove this to use originals.
+    window.SNAIL_CONFIG = Object.assign({ texturePack: 'hd' }, window.SNAIL_CONFIG || {});
+  </script>
+
+  <script>
     // Show/hide the landscape hint. Pure DOM (no game module) so it stays out of
     // src/ui/*. Dismiss is sticky for the session.
     (function () {

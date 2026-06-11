@@ -35,6 +35,7 @@ export function resolveTextureUrl(logicalPath) {
 class AssetManager {
   constructor() {
     this.tga = new TGALoader();
+    this.img = new THREE.TextureLoader();   // for the HD pack's PNGs
     this._texCache = new Map();
     this._bufCache = new Map();
     this.ctx = null; // set by AudioEngine so we share one AudioContext
@@ -49,14 +50,21 @@ class AssetManager {
   texture(logicalPath, opts = {}) {
     if (this._texCache.has(logicalPath)) return this._texCache.get(logicalPath);
     const url = resolveTextureUrl(logicalPath);
+    // HD pack serves .png (decode with TextureLoader); the original pack serves
+    // .TGA (TGALoader). TGALoader's data is top-down with flipY:true, and the
+    // upscaled PNGs are saved upright — TextureLoader's default flipY:true gives
+    // the SAME orientation, so HD and original line up without a UV flip.
+    const isPng = url.toLowerCase().endsWith('.png');
+    const loader = isPng ? this.img : this.tga;
     // NOTE: TGALoader extends DataTextureLoader, whose async onLoad RESETS
     // wrapS/wrapT to ClampToEdge (it ignores our pre-set values). So we must
     // re-apply the wrap/colorSpace opts in the onLoad callback or tiling
     // (repeat) silently breaks once the image finishes decoding.
-    const tex = this.tga.load(url, (t) => this._applyTexOpts(t, opts), undefined, () => {
-      // on error, fall back to original pack if we were on HD
-      if (TEXTURE_PACK !== 'original') {
-        this.tga.load(`${ASSET_BASE}/${logicalPath}.TGA`, (t) => this._applyTexOpts(t, opts));
+    const tex = loader.load(url, (t) => this._applyTexOpts(t, opts), undefined, () => {
+      // HD/PNG missing or undecodable → fall back to the original extracted TGA
+      if (isPng) {
+        const t2 = this.tga.load(`${ASSET_BASE}/${logicalPath}.TGA`, (t) => this._applyTexOpts(t, opts));
+        this._texCache.set(logicalPath, t2);
       }
     });
     this._applyTexOpts(tex, opts);
