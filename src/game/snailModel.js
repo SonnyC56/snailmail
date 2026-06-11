@@ -264,11 +264,11 @@ export function buildSnail(colors = SNAIL_COLORS) {
     }
     if (!firstGeo) return; // total failure → keep procedural Turbo
 
-    // ground Turbo on the canonical idle pose (consistent foot height across
-    // the animation frames) so the foot rests on the track.
+    // Ground Turbo so his foot rests ON the track. The BASE bbox alone left him
+    // sinking ~0.4u into the road, so lift by a measured clearance margin.
     const baseGeo = state.geometries.get('TURBO-BASE-000') || firstGeo;
     baseGeo.computeBoundingBox();
-    turbo.position.y = -baseGeo.boundingBox.min.y * TURBO_SCALE + 0.02;
+    turbo.position.y = -baseGeo.boundingBox.min.y * TURBO_SCALE + 0.62;
 
     // one shared textured material for the body
     const texName = (firstGeo.userData.texture || 'SNAIL-TURBO.TGA').replace(/\.[^.]+$/, '').toUpperCase();

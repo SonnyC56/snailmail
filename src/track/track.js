@@ -126,7 +126,13 @@ export class Track {
       const pf = paths.find((p) => s >= p.at && s < p.at + p.len);
       if (pf) {
         const u = (s - pf.at) / pf.len;             // 0..1 through the feature
-        if (pf.family === 'loop') bp += 2 * Math.PI * u;                 // full vertical loop
+        if (pf.family === 'loop') {                                      // full vertical loop
+          bp += 2 * Math.PI * u;
+          // bow the loop sideways so it advances laterally and doesn't stack
+          // back on top of the entry/exit (a self-overlapping in-place circle).
+          const dir = (Math.floor(pf.at / 11) % 2) ? 1 : -1;
+          by += dir * 0.9 * Math.sin(Math.PI * u);
+        }
         else if (pf.family === 'hill') bp += 0.75 * Math.sin(2 * Math.PI * u);   // up then down
         else if (pf.family === 'valley') bp -= 0.75 * Math.sin(2 * Math.PI * u); // down then up
         else if (pf.family === 'slalom') by += 0.6 * Math.sin(4 * Math.PI * u);  // S-weave

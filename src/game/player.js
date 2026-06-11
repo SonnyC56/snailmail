@@ -223,8 +223,19 @@ export class Player {
   launch(power = 1) {
     const fr = this.track.frameAt(this.s);
     this._airPos.copy(this.track.surfacePoint(this.s, this.x)).addScaledVector(fr.up, 0.1);
-    this._airVel.copy(fr.tangent).multiplyScalar(this.speed * 1.05)
-      .addScaledVector(fr.up, 13 * power)
+    // Size the hop to clear the gap just ahead (some are ~27u wide) plus a
+    // landing margin — a fixed arc fell short and dropped you into wide gaps.
+    let target = 20 * power;
+    const ng = this.track.nextGap(this.s);
+    if (ng != null && ng < 14) {
+      const g = this.track.gapAt(this.s + ng + 0.5);
+      if (g) target = (g.end - this.s) + 9;
+    }
+    const vF = Math.max(this.speed * 1.1, 22);
+    const airT = Math.max(0.7, target / vF);
+    const vUp = (GRAVITY * airT) / 2;               // vertical velocity to match that air time
+    this._airVel.copy(fr.tangent).multiplyScalar(vF)
+      .addScaledVector(fr.up, vUp)
       .addScaledVector(fr.side, this.xVel);
     this._airUp.copy(fr.up);
     this.state = PlayerState.AIRBORNE;
