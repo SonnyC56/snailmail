@@ -19,6 +19,7 @@ export const THEMES = {
     background: 'SPACEGREENWARP',
     trackTex: 'OBJECTS/WORLD00/TRACK0',
     slideTex: 'OBJECTS/WORLD00/SLIDE0',
+    distort: 5,            // original SPACEGREENWARP.TXT Distort:5.0
     musicWorld: 0,
     skyTop: 0x3a7bd5,
     skyBottom: 0xbfe8ff,
@@ -49,6 +50,7 @@ export const THEMES = {
     background: 'SPACERED',
     trackTex: 'OBJECTS/WORLD00/TRACK2',
     slideTex: 'OBJECTS/WORLD00/SLIDE2',
+    distort: 10,           // original SPACERED.TXT Distort:10.0
     musicWorld: 2,
     skyTop: 0xc4581f,
     skyBottom: 0xffd9a0,
@@ -78,6 +80,7 @@ export const THEMES = {
     background: 'SPACEBLUESWHORL',
     trackTex: 'OBJECTS/WORLD00/TRACK1',
     slideTex: 'OBJECTS/WORLD00/SLIDE1',
+    distort: 10,           // original SPACEBLUESWHORL.TXT Distort:10.0
     musicWorld: 1,
     skyTop: 0x1a2a6e,
     skyBottom: 0x9fd4e8,
@@ -105,8 +108,9 @@ export const THEMES = {
     name: 'Ember World',
     song: 'volcano',
     background: 'SPACERED',
-    trackTex: 'OBJECTS/WORLD00/TRACK2',
-    slideTex: 'OBJECTS/WORLD00/SLIDE2',
+    trackTex: 'OBJECTS/WORLD00/TRACK3',
+    slideTex: 'OBJECTS/WORLD00/SLIDE3',
+    distort: 10,           // the 4th original road skin; SPACERED Distort:10.0
     musicWorld: 2,
     skyTop: 0x2a0a14,
     skyBottom: 0xb83a1a,
@@ -136,6 +140,7 @@ export const THEMES = {
     background: 'SPACEPURPLE',
     trackTex: 'OBJECTS/WORLD00/TRACK0',
     slideTex: 'OBJECTS/WORLD00/SLIDE0',
+    distort: 20,           // original SPACEPURPLE.TXT Distort:20.0
     musicWorld: 3,
     skyTop: 0x12041e,
     skyBottom: 0x4a1a6e,

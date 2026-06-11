@@ -151,9 +151,11 @@ export function trackDefForLevel(level) {
   const def = {
     seed: level.seed,
     length,
-    // keep the curvy/hilly Rainbow-Road look; intensity still scales w/ difficulty
-    curviness: level.curviness,
-    hilliness: level.hilliness,
+    // The originals were largely STRAIGHT highways whose drama came from the
+    // authored Path= features (loops/hills/half-pipes), not a winding baseline.
+    // Damp the procedural curve so those reconstructed features dominate.
+    curviness: level.curviness * 0.4,
+    hilliness: level.hilliness * 0.35,
     halfWidth: 6,
     gaps: [],
     // real 3D track features decoded from the segment Path= markers
