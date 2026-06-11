@@ -213,13 +213,14 @@ export class Player {
     this._steer(dt, input);
     this._tryFire(input);
 
-    // Side barriers (slipstream walls): you can't fall off the sides — you're
-    // clamped to the drivable width. You only fall where the road is absent
-    // across the row (a gap to jump). Matches the original.
+    // Side barriers (slipstream walls): you can't steer off the OUTER edge of
+    // the road, but any hole IN the road (interior void / gap) still drops you.
     const ext = this.track.drivableExtent(this.s);
-    if (!ext) { this._startFall(); return; }            // gap row → fall
+    if (!ext) { this._startFall(); return; }            // whole row void → fall
     if (this.x < ext.min) { this.x = ext.min; this.xVel = Math.max(0, this.xVel); }
     else if (this.x > ext.max) { this.x = ext.max; this.xVel = Math.min(0, this.xVel); }
+    // hole within the road (no barrier over a hole) → fall through it
+    if (!this.track.hasSurface(this.s, this.x)) { this._startFall(); return; }
   }
 
   /** Ballistic hop launched by a jump pod / ramp. */

@@ -33,8 +33,8 @@ export class ChaseCamera {
 
   update(dt, player) {
     const track = this.track;
-    const behind = 8.5;
-    const height = 3.6;
+    const behind = 6.2;
+    const height = 3.0;
 
     // sample a point behind the player along the track for a stable anchor
     const camS = Math.max(0, player.s - behind);

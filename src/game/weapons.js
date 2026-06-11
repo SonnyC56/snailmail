@@ -41,7 +41,7 @@ function makeShotMesh(kind) {
       map: assets.texture('OBJECTS/LAZER/LAZER'),
       transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
     }));
-    s.scale.set(0.6, 1.9, 1);
+    s.scale.set(0.15, 0.475, 1);   // 25% of the original beam size
     return s;
   }
   const grp = new THREE.Group();
