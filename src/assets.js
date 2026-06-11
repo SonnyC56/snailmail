@@ -49,7 +49,11 @@ class AssetManager {
   texture(logicalPath, opts = {}) {
     if (this._texCache.has(logicalPath)) return this._texCache.get(logicalPath);
     const url = resolveTextureUrl(logicalPath);
-    const tex = this.tga.load(url, undefined, undefined, () => {
+    // NOTE: TGALoader extends DataTextureLoader, whose async onLoad RESETS
+    // wrapS/wrapT to ClampToEdge (it ignores our pre-set values). So we must
+    // re-apply the wrap/colorSpace opts in the onLoad callback or tiling
+    // (repeat) silently breaks once the image finishes decoding.
+    const tex = this.tga.load(url, (t) => this._applyTexOpts(t, opts), undefined, () => {
       // on error, fall back to original pack if we were on HD
       if (TEXTURE_PACK !== 'original') {
         this.tga.load(`${ASSET_BASE}/${logicalPath}.TGA`, (t) => this._applyTexOpts(t, opts));

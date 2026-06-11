@@ -281,7 +281,9 @@ export class Track {
         const p = fr.pos.clone().addScaledVector(fr.side, x);
         positions.push(p.x, p.y, p.z);
         normals.push(fr.up.x, fr.up.y, fr.up.z);
-        uvs.push(t, s * 0.06);
+        // v is world-scaled (one 256px tile per 20 units) and u spans the road
+        // width 0..1 once — identical density to the grid road's UVs.
+        uvs.push(t, s * 0.05);
 
         // base color, darker toward edges
         const edgeness = Math.pow(Math.abs(x) / this.halfWidth, 3);
@@ -319,16 +321,18 @@ export class Track {
     geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
     geo.setIndex(indices);
 
-    // With an original road texture, let it show at full brightness (the
-    // texture carries the lane art); otherwise use the procedural vertex
-    // colours. A faint emissive keeps the road readable in dark galaxies.
+    // With an original road texture, render the procedural ribbon exactly like
+    // the grid road (Track._buildGridRoad): the tiling is baked into the UV
+    // (v = s*0.05), so repeat stays (1,1). NOTE: assets.texture() returns one
+    // shared cached THREE.Texture per path — both road types MUST keep repeat
+    // (1,1) or they clobber each other. Otherwise fall back to vertex colours.
     let mat;
     if (theme.trackTex) {
       const tex = assets.texture(theme.trackTex, { wrap: true });
-      tex.repeat.set(1, Math.max(2, this.length / 22));
+      tex.repeat.set(1, 1);
       mat = new THREE.MeshLambertMaterial({
         map: tex, side: THREE.DoubleSide,
-        emissive: new THREE.Color(theme.surface), emissiveIntensity: 0.18,
+        emissive: new THREE.Color(theme.surface), emissiveIntensity: 0.16,
       });
     } else {
       mat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
