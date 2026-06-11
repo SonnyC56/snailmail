@@ -1,0 +1,14 @@
+import pp from 'puppeteer-core';
+const CHROME='/home/sonny/.cache/puppeteer/chrome/linux-127.0.6533.88/chrome-linux64/chrome';
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const b=await pp.launch({executablePath:CHROME,headless:'new',args:['--no-sandbox','--enable-unsafe-swiftshader','--ignore-gpu-blocklist']});
+const p=await b.newPage();
+await p.goto('http://localhost:5185/',{waitUntil:'networkidle2'});
+await p.evaluate(()=>localStorage.setItem('snailx.save.v1','{"seenIntro":true}'));
+await p.mouse.click(400,300); await sleep(500);
+const d=await p.evaluate(async()=>{const g=window.__snail.game;g.mode='arcade';g.startLevel(1,0);await new Promise(r=>setTimeout(r,4500));
+  const tr=g.level.track; const out=[];
+  for(let r=0;r<16;r++) out.push(`row${r}: [${tr.cells[r]}] len=${tr.cells[r].length}`);
+  return {sample:out, colAt0: Math.round((0/5)*3.5+3.5)};});
+console.log(d.sample.join('\n')); console.log('xToCol(0)=',d.colAt0);
+await b.close();

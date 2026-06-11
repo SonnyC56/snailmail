@@ -1,0 +1,1196 @@
+/* ==========================================================================
+   Snail Express — global styles
+   Cartoon casual-game look: chunky rounded panels, warm gradients, bouncy UI
+   ========================================================================== */
+
+@font-face {
+  /* No external fonts: we rely on system stacks tuned for a chunky look */
+  font-family: '__placeholder__';
+  src: local('Arial');
+}
+
+:root {
+  --ui-font: 'Trebuchet MS', 'Comic Sans MS', 'Segoe UI', Verdana, sans-serif;
+  --panel-bg: linear-gradient(180deg, #fff8e1 0%, #ffe9b3 100%);
+  --panel-border: #7a4a1f;
+  --panel-shadow: rgba(20, 10, 40, 0.55);
+  --accent: #ff8c1a;
+  --accent-dark: #d96d00;
+  --text-dark: #4a2c0f;
+  --text-light: #fffbe8;
+  --good: #46b646;
+  --bad: #e04040;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #0a0a1e;
+  font-family: var(--ui-font);
+  -webkit-user-select: none;
+  user-select: none;
+  /* block pull-to-refresh / rubber-banding on mobile */
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* full-bleed under notches when launched as a PWA / with viewport-fit=cover */
+#app {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  /* prevent the browser's own pinch-zoom / double-tap gestures on the game */
+  touch-action: none;
+  -ms-touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#game-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+
+/* interactive UI surfaces (menus, lobby) should still allow normal scrolling
+   inside their panels while the game canvas stays gesture-free */
+#ui-root .frame-panel,
+.mp-rooms,
+.starmap-stars { touch-action: pan-y; }
+
+.hidden { display: none !important; }
+
+/* ----------------------------------------------------------------------
+   HUD
+   ---------------------------------------------------------------------- */
+#hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  color: var(--text-light);
+  text-shadow: 0 2px 0 rgba(0,0,0,0.55), 0 0 6px rgba(0,0,0,0.4);
+  font-weight: bold;
+  z-index: 5;
+}
+
+.hud-top {
+  position: absolute;
+  top: 10px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 0 18px;
+}
+
+.hud-block { display: flex; flex-direction: column; gap: 4px; }
+.hud-block.center { align-items: center; }
+.hud-block.right { align-items: flex-end; }
+
+.hud-label {
+  font-size: 13px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
+.hud-value { font-size: 28px; line-height: 1; }
+.hud-value.big { font-size: 38px; }
+.hud-value.time-warning { color: #ff5544; animation: hud-pulse 0.5s infinite alternate; }
+
+@keyframes hud-pulse { from { transform: scale(1); } to { transform: scale(1.12); } }
+
+.hud-letters { display: flex; align-items: center; gap: 6px; font-size: 26px; }
+
+/* LIVES — original snail-shell LIFE icons in the BOTTOM-LEFT corner */
+.hud-lives {
+  position: absolute;
+  left: 18px;
+  bottom: 16px;
+  display: flex;
+  gap: 7px;
+  align-items: flex-end;
+  font-size: 26px;
+}
+
+/* packages: original PARCELICON next to the count */
+.hud-pkg-row { display: flex; align-items: center; gap: 8px; }
+.hud-parcel-icon {
+  display: none; /* shown once the sprite loads */
+  width: 28px; height: 56px;
+  background-size: contain; background-repeat: no-repeat; background-position: center;
+  filter: drop-shadow(0 2px 3px rgba(0,0,0,0.5));
+}
+.hud-parcel-icon.has-sprite { display: inline-block; }
+
+/* lives: original LIFE snail-shell icon (32x32). Falls back to emoji span. */
+.hud-lives .life-icon {
+  display: inline-block;
+  width: 34px; height: 34px;
+  background-size: contain; background-repeat: no-repeat; background-position: center;
+  filter: drop-shadow(0 2px 3px rgba(0,0,0,0.6));
+}
+.hud-lives .life-icon.fallback { font-size: 30px; line-height: 34px; text-align: center; }
+
+/* --------------------------------------------------------------------------
+   DAMAGE / POSTAL meter — original vertical DAMAGEGUAGE tube on the RIGHT side,
+   beneath the score area with clear margin from the top edge. The bright
+   DAMAGEGUAGEFULL tube (64x512) is revealed bottom->top by a clip whose height
+   = meter ratio (a higher meter = more fill = more danger). A CSS fallback bar
+   shows only until the sprite art loads.
+   -------------------------------------------------------------------------- */
+.hud-gauge {
+  position: absolute;
+  top: 96px; right: 24px;
+  width: 56px; height: min(46vh, 360px);
+}
+.hud-gauge-frame, .hud-gauge-fill-clip {
+  position: absolute; inset: 0;
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+}
+.hud-gauge-frame {
+  filter: drop-shadow(0 3px 6px rgba(0,0,0,0.55));
+}
+/* CSS fallback frame so the tube reads even before art decodes (never blank) */
+.hud-gauge:not(.has-sprite) .hud-gauge-frame {
+  background: rgba(20, 8, 40, 0.5);
+  border: 3px solid rgba(255, 255, 255, 0.5);
+  border-radius: 14px;
+}
+.hud-gauge-fill-clip {
+  /* clip from the bottom: only the lower `height` portion is visible */
+  height: 0%;
+  top: auto; bottom: 0;
+  overflow: hidden;
+  transition: height 0.18s linear;
+}
+.hud-gauge-fill {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: min(46vh, 360px); /* matches the gauge height so the tube art lines up under the clip */
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+}
+.hud-gauge.danger .hud-gauge-fill { animation: gauge-flash 0.45s steps(2) infinite; }
+@keyframes gauge-flash { 0% { filter: none; } 100% { filter: brightness(1.5) saturate(1.4); } }
+
+/* CSS fallback bar — only visible while the gauge sprite hasn't loaded.
+   Vertical, sitting just left of the frame, filling bottom->top. */
+.hud-meter.fallback {
+  position: absolute;
+  left: 7px; right: 7px; bottom: 7px; top: 7px;
+  background: transparent;
+  overflow: hidden;
+  border-radius: 10px;
+}
+.hud-gauge.has-sprite .hud-meter.fallback { display: none; }
+.hud-meter-fill {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  width: 100%; height: 0%;
+  background: linear-gradient(0deg, #9fe09f, #46b646);
+  border-radius: 6px; transition: height 0.18s linear, background 0.3s;
+}
+
+/* --------------------------------------------------------------------------
+   PROGRESS indicator — vertical, LEFT side. Original PROGRESS-BAR (64x256) is
+   the track, PROGRESS-BAR-LIT the lit fill (revealed bottom->top by a clip),
+   PROGRESS-CURSOR (64x64) the marker riding the top of the fill as progress
+   goes 0 (bottom) -> 1 (top). CSS fallback bar shows until the art loads.
+   -------------------------------------------------------------------------- */
+.hud-progress-v {
+  position: absolute;
+  top: 96px; left: 24px;
+  width: 48px; height: min(46vh, 360px);
+}
+.hud-progress-track, .hud-progress-lit-clip {
+  position: absolute; inset: 0;
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+}
+.hud-progress-track {
+  filter: drop-shadow(0 3px 6px rgba(0,0,0,0.55));
+}
+/* CSS fallback track so the bar reads even before art decodes (never blank) */
+.hud-progress-v:not(.has-sprite) .hud-progress-track {
+  background: rgba(10, 14, 40, 0.55);
+  border: 3px solid rgba(120, 160, 240, 0.55);
+  border-radius: 14px;
+}
+.hud-progress-lit-clip {
+  /* clip from the bottom: only the lower `height` portion is visible */
+  height: 0%;
+  top: auto; bottom: 0;
+  overflow: hidden;
+  transition: height 0.2s linear;
+}
+.hud-progress-lit {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: min(46vh, 360px); /* matches the bar height so the lit art lines up under the clip */
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+}
+/* the marker that climbs the bar — 64x64 cursor sprite */
+.hud-progress-cursor {
+  position: absolute;
+  left: 50%;
+  bottom: -16px;
+  width: 40px; height: 40px;
+  transform: translateX(-50%);
+  background-size: contain; background-repeat: no-repeat; background-position: center;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.6));
+  transition: bottom 0.2s linear;
+  pointer-events: none;
+}
+/* CSS fallback cursor disc so the marker reads before the sprite loads */
+.hud-progress-cursor:not(.has-sprite) {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 34%, #ffe9a0, #ff8c1a 70%);
+  border: 2px solid #7a4a1f;
+  box-shadow: 0 0 8px rgba(255, 180, 60, 0.7);
+}
+/* CSS fallback lit fill — only visible while the bar sprite hasn't loaded */
+.hud-progress-fallback {
+  position: absolute;
+  left: 7px; right: 7px; bottom: 7px; top: 7px;
+  overflow: hidden;
+  border-radius: 10px;
+  pointer-events: none;
+}
+.hud-progress-v.has-sprite .hud-progress-fallback { display: none; }
+.hud-progress-fallback-fill {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  width: 100%; height: 0%;
+  background: linear-gradient(0deg, #ffd24d, #ff8c1a);
+  border-radius: 6px;
+  transition: height 0.2s linear;
+}
+
+.hud-weapon {
+  font-size: 15px; margin-top: 4px;
+  color: #ffe9a0; letter-spacing: 0.5px;
+}
+.hud-weapon.flash { animation: weap-flash 0.5s ease; }
+@keyframes weap-flash { 0% { transform: scale(1.4); color: #fff; } 100% { transform: scale(1); } }
+
+/* live multiplayer standings — kept clear of the right-side damage gauge */
+.hud-mp {
+  position: absolute; top: 96px; right: 96px;
+  display: flex; flex-direction: column; gap: 3px;
+  font-size: 14px; min-width: 150px;
+}
+.hud-mp-row {
+  display: flex; align-items: center; gap: 8px;
+  background: rgba(0, 0, 30, 0.4); border-radius: 8px; padding: 2px 8px;
+}
+.hud-mp-row.you { background: rgba(255, 140, 26, 0.5); }
+.hud-mp-row .place { font-weight: bold; width: 16px; }
+.hud-mp-row .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hud-mp-row .pct { opacity: 0.85; }
+
+@keyframes cd-pop {
+  0% { opacity: 0; transform: scale(2); }
+  30% { opacity: 1; transform: scale(1); }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: scale(0.9); }
+}
+
+.hud-speedo {
+  position: absolute;
+  bottom: 12px;
+  right: 18px;
+  text-align: right;
+}
+
+.hud-powerup {
+  position: absolute;
+  bottom: 12px;
+  left: 18px;
+  font-size: 22px;
+}
+
+.hud-message {
+  position: absolute;
+  top: 34%;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 52px;
+  color: #ffd24d;
+  -webkit-text-stroke: 2px #7a4a1f;
+  opacity: 0;
+  transform: scale(0.6);
+}
+
+.hud-message.show {
+  animation: msg-pop 1.4s ease forwards;
+}
+
+@keyframes msg-pop {
+  0%   { opacity: 0; transform: scale(0.5); }
+  18%  { opacity: 1; transform: scale(1.15); }
+  30%  { transform: scale(1); }
+  78%  { opacity: 1; }
+  100% { opacity: 0; transform: scale(1.05); }
+}
+
+.hud-countdown {
+  position: absolute;
+  top: 30%;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 110px;
+  color: #fffbe8;
+  -webkit-text-stroke: 3px #d96d00;
+}
+
+/* ----------------------------------------------------------------------
+   Menus / panels
+   ---------------------------------------------------------------------- */
+#ui-root {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  padding: 4vh 4vw;
+}
+
+.screen.dim { background: rgba(8, 6, 30, 0.6); }
+
+/* ---- original-art framed "stage" ------------------------------------- */
+/* The 2004 menus were a single 640x512 framed screen. We letterbox that whole
+   framed artwork (object-fit:contain) so it is always fully visible & centered
+   — never cover-stretched into random fragments. UI overlays the frame's panel
+   window. All screens sit on a deep purple/space base matching the art. */
+.menu-screen, .splash-screen, .help-screen {
+  background:
+    radial-gradient(ellipse at 50% 38%, #2a0e3e 0%, #11061f 62%, #070310 100%);
+}
+
+.stage {
+  position: relative;
+  /* the original frame is 640x512 (5:4). keep that ratio and fit the viewport */
+  aspect-ratio: 640 / 512;
+  width: min(96vw, calc(94vh * (640 / 512)));
+  max-height: 94vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.stage-art {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: contain;
+  image-rendering: auto;
+  pointer-events: none;
+  filter: drop-shadow(0 14px 34px rgba(0, 0, 0, 0.6));
+}
+/* content window: sits inside the frame's inner panel area. The original frame
+   border is ~7% on the left/top, the logo banner eats the top-right; we inset
+   the content into the purple swirl panel and let it scroll if tall. */
+.stage-inner {
+  position: relative;
+  z-index: 1;
+  width: 100%; height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 14% 12% 12%;
+}
+.stage-inner.framed { padding: 17% 13% 13% 16%; }
+
+/* fallback: if the framed plate never decodes, draw a chunky CSS frame so the
+   panel still reads intentionally (never bare). */
+.stage:not(.has-sprite) .stage-art { display: none; }
+.stage:not(.has-sprite) {
+  background: linear-gradient(160deg, #3a1466, #1c0833);
+  border: 8px solid #46217a;
+  border-radius: 26px;
+  box-shadow: inset 0 0 0 4px #6a3aa8, 0 16px 40px rgba(0,0,0,0.6);
+}
+.stage:not(.has-sprite) .stage-inner.framed { padding: 8% 8%; }
+
+/* title splash: full art carries the logo + Turbo; menu sits low over it. */
+.splash-screen .stage-inner { justify-content: flex-end; padding-bottom: 6%; }
+.title-menu { gap: 12px; width: min(60%, 320px); }
+.splash-stage.has-sprite + .title-fallback,
+.splash-stage.has-sprite .title-fallback { display: none; }
+.stage.has-sprite .title-fallback { display: none; }
+.title-fallback { display: flex; flex-direction: column; align-items: center; margin-bottom: 4%; }
+
+/* help screen: original legend art shown whole; text panel only as fallback. */
+.help-stage.has-sprite ~ * .help-panel,
+.help-stage.has-sprite .help-panel { display: none; }
+.help-screen .stage-inner { padding: 0; }
+
+/* the framed panel content box (over the purple swirl window) */
+.frame-panel {
+  width: 100%;
+  max-height: 100%;
+  overflow-y: auto;
+  color: var(--text-light);
+  text-align: center;
+  text-shadow: 0 2px 0 rgba(0,0,0,0.55);
+}
+.frame-panel h2 {
+  font-size: clamp(20px, 3vw, 30px);
+  color: #ffd24d;
+  -webkit-text-stroke: 1px #5a2d00;
+  text-shadow: 0 2px 0 #5a2d00, 0 0 10px rgba(255, 180, 60, 0.4);
+  margin-bottom: 14px;
+  letter-spacing: 1px;
+}
+.frame-panel .menu-list { width: 100%; }
+.frame-panel.story-card {
+  background: var(--panel-bg);
+  border: 4px solid var(--panel-border);
+  border-radius: 22px;
+  box-shadow: 0 10px 0 rgba(90, 50, 10, 0.45), 0 18px 40px var(--panel-shadow);
+  padding: 26px 34px;
+  color: var(--text-dark);
+  text-align: left;
+  text-shadow: none;
+  max-width: min(92vw, 560px);
+}
+
+.version-tag {
+  position: absolute; bottom: 10px; right: 14px;
+  font-size: 12px; color: rgba(255,255,255,0.5);
+  z-index: 2;
+}
+
+/* ---- original PLAY sprite button -------------------------------------- */
+.sprite-btn {
+  position: relative;
+  border: none; background: none; cursor: pointer; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 100%;
+}
+.sprite-btn-img {
+  display: none; /* shown when decoded */
+  width: 64px; height: 64px;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5));
+  transition: transform 0.1s ease, filter 0.1s ease;
+}
+.sprite-btn.has-sprite .sprite-btn-img { display: block; }
+.sprite-btn.has-sprite .sprite-btn-label { display: none; }
+.sprite-btn:hover .sprite-btn-img { transform: scale(1.12); filter: drop-shadow(0 6px 9px rgba(0,0,0,0.55)) brightness(1.12); }
+.sprite-btn:active .sprite-btn-img { transform: scale(0.96); }
+.play-btn .sprite-btn-img { width: 84px; height: 84px; }
+
+/* ---- starmap / Intergalactic Delivery Route -------------------------- */
+/* The original was a star-map: the STARMAPBG nebula filling the screen, the
+   SPACEMAPLOGO banner up top, the spiral GALAXY plates scattered as nodes,
+   joined by dotted slipstream routes, and a panel of stars (levels) for the
+   selected galaxy along the bottom. */
+.starmap-screen {
+  background-color: #05030f;
+  background-position: center;
+  background-size: cover;
+  overflow: hidden;
+  justify-content: flex-start;
+  padding: 2.5vh 3vw 2vh;
+}
+.starmap-screen::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse at 50% 42%, rgba(5,3,15,0.05), rgba(5,3,15,0.72));
+  pointer-events: none;
+}
+.starmap-screen > * { position: relative; z-index: 1; }
+.starmap-logo {
+  width: min(40vw, 280px);
+  margin-bottom: 2px;
+  filter: drop-shadow(0 4px 10px rgba(0,0,0,0.7));
+}
+.starmap-logo:not([src]) { display: none; }
+.starmap-title {
+  font-size: clamp(14px, 2.2vw, 20px);
+  font-weight: bold;
+  color: #cfe3ff;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  text-shadow: 0 0 12px rgba(90, 140, 255, 0.75), 0 2px 0 #000;
+  margin-bottom: 6px;
+}
+
+/* the constellation field — galaxy nodes are absolutely positioned by % */
+.starmap-field {
+  position: relative;
+  width: min(92vw, 1040px);
+  flex: 1 1 auto;
+  margin: 4px 0 6px;
+  min-height: 0;
+}
+.starmap-routes {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+.route-line {
+  stroke: rgba(120, 150, 220, 0.28);
+  stroke-width: 0.5;
+  stroke-dasharray: 1.4 1.6;
+  vector-effect: non-scaling-stroke;
+  fill: none;
+}
+.route-line.lit {
+  stroke: rgba(120, 190, 255, 0.85);
+  filter: drop-shadow(0 0 3px rgba(90, 160, 255, 0.7));
+}
+
+/* a galaxy node: spiral plate + name, positioned over the nebula */
+.galaxy-node {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 132px;
+  text-align: center;
+  background: none; border: none; padding: 0; cursor: pointer;
+  z-index: 1;
+  transition: transform 0.12s ease;
+}
+.galaxy-node:not(.locked):hover { transform: translate(-50%, -50%) scale(1.06); z-index: 3; }
+.galaxy-node.locked { opacity: 0.5; filter: grayscale(0.75) brightness(0.7); cursor: default; }
+.galaxy-plate {
+  position: relative;
+  width: 96px; height: 96px;
+  display: flex; align-items: center; justify-content: center;
+}
+.galaxy-plate img {
+  position: absolute;
+  width: 100%; height: 100%;
+  object-fit: contain;
+}
+.galaxy-plate > img:first-child:not([src]) { display: none; }
+/* selection ring (GALAXYSELECT) — sits a touch larger than the plate */
+.galaxy-ring {
+  width: 128%; height: 128%;
+  opacity: 0;
+  transition: opacity 0.15s ease, transform 0.6s linear;
+}
+.galaxy-node:not(.locked):hover .galaxy-ring { opacity: 0.6; }
+.galaxy-node.selected .galaxy-ring { opacity: 1; animation: galaxy-ring-spin 14s linear infinite; }
+@keyframes galaxy-ring-spin { to { transform: rotate(360deg); } }
+.galaxy-node.selected .galaxy-plate { filter: drop-shadow(0 0 12px rgba(120, 190, 255, 0.8)); }
+/* CSS fallback orb behind the galaxy plate so nodes never look empty */
+.galaxy-plate::after {
+  content: '';
+  position: absolute; inset: 12px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 34%, rgba(200,170,100,0.55), rgba(40,20,8,0.0) 70%);
+  z-index: -1;
+}
+.galaxy-lock {
+  position: absolute; top: 50%; left: 50%;
+  width: 26px; height: 22px;
+  transform: translate(-50%, -40%);
+  border-radius: 5px;
+  background: #cfd6e8;
+  box-shadow: inset 0 -4px 0 rgba(0,0,0,0.25);
+}
+.galaxy-lock::before {
+  content: '';
+  position: absolute; left: 50%; top: -10px;
+  width: 16px; height: 16px;
+  transform: translateX(-50%);
+  border: 4px solid #cfd6e8;
+  border-bottom: none;
+  border-radius: 9px 9px 0 0;
+}
+.galaxy-name {
+  font-size: 13px;
+  font-weight: bold;
+  color: #ffe9a0;
+  text-shadow: 0 2px 0 #000, 0 0 8px rgba(0,0,0,0.7);
+  margin-top: 4px;
+  white-space: nowrap;
+}
+
+/* the star/level panel for the selected galaxy (sits low, over the map base) */
+.starmap-stars {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 22px;
+  margin-bottom: 4px;
+  background: rgba(8, 10, 30, 0.55);
+  border: 2px solid rgba(120, 160, 240, 0.4);
+  border-radius: 16px;
+  box-shadow: 0 8px 22px rgba(0,0,0,0.5), inset 0 0 24px rgba(40, 60, 140, 0.25);
+  backdrop-filter: blur(2px);
+}
+.starmap-stars-head {
+  font-size: 15px; font-weight: bold; letter-spacing: 1px;
+  color: #cfe3ff; text-transform: uppercase;
+  text-shadow: 0 1px 0 #000, 0 0 8px rgba(90,140,255,0.6);
+}
+.star-list { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+
+.level-star {
+  position: relative;
+  width: 48px; height: 48px;
+  border: none; background: none; padding: 0; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: transform 0.1s ease, filter 0.1s ease;
+}
+.level-star:not(.locked):hover { transform: scale(1.12); }
+.level-star-ring {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: contain;
+  opacity: 0.55;
+  transition: opacity 0.12s ease;
+}
+.level-star-ring:not([src]) { display: none; }
+.level-star:hover .level-star-ring { opacity: 1; }
+/* CSS fallback disc behind the ring so the star reads even before art loads */
+.level-star::before {
+  content: '';
+  position: absolute; inset: 7px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 34%, #2c4a8a, #122042);
+  border: 2px solid rgba(120, 160, 240, 0.5);
+  box-shadow: inset 0 0 6px rgba(0,0,0,0.5);
+}
+.level-star-num {
+  position: relative; z-index: 1;
+  font-family: var(--ui-font);
+  font-weight: bold; font-size: 17px;
+  color: #fffbe8;
+  text-shadow: 0 1px 0 #000, 0 0 6px rgba(0,0,0,0.6);
+}
+.level-star.done::before { background: radial-gradient(circle at 38% 34%, #3aa14a, #135018); border-color: rgba(120,230,140,0.6); }
+.level-star.locked { cursor: default; filter: grayscale(1) brightness(0.7); }
+.level-star.locked .level-star-num { opacity: 0.5; }
+.level-star.locked::after {
+  content: '';
+  position: absolute; top: 50%; left: 50%;
+  width: 12px; height: 10px;
+  transform: translate(-50%, -30%);
+  border-radius: 3px;
+  background: #cfd6e8;
+  z-index: 1;
+}
+.level-star.locked .level-star-num { display: none; }
+/* medal tint on completed stars */
+.level-star.medal-gold::before { box-shadow: inset 0 0 8px rgba(255,210,80,0.9), 0 0 8px rgba(255,200,60,0.7); border-color: #ffd24d; }
+.level-star.medal-silver::before { border-color: #d7e0ee; box-shadow: inset 0 0 8px rgba(220,230,245,0.8); }
+.level-star.medal-bronze::before { border-color: #d08a4a; box-shadow: inset 0 0 8px rgba(210,140,70,0.8); }
+
+.game-title {
+  font-size: clamp(44px, 9vw, 96px);
+  font-weight: 900;
+  color: #ffd24d;
+  -webkit-text-stroke: 3px #7a4a1f;
+  text-shadow: 0 6px 0 #7a4a1f, 0 12px 24px rgba(0,0,0,0.6);
+  letter-spacing: 2px;
+  transform: rotate(-3deg);
+  margin-bottom: 6px;
+  animation: title-bob 3s ease-in-out infinite;
+}
+
+@keyframes title-bob {
+  0%, 100% { transform: rotate(-3deg) translateY(0); }
+  50% { transform: rotate(-2deg) translateY(-10px); }
+}
+
+.game-subtitle {
+  font-size: clamp(14px, 2.2vw, 22px);
+  color: var(--text-light);
+  text-shadow: 0 2px 0 rgba(0,0,0,0.6);
+  margin-bottom: 2vh;
+  letter-spacing: 1px;
+}
+
+.menu-list { display: flex; flex-direction: column; gap: 12px; align-items: stretch; }
+
+.btn {
+  font-family: var(--ui-font);
+  font-size: 22px;
+  font-weight: bold;
+  color: var(--text-light);
+  background: linear-gradient(180deg, #ffb340 0%, #ff8c1a 55%, #f07800 100%);
+  border: 3px solid #8a4d12;
+  border-radius: 16px;
+  padding: 12px 34px;
+  cursor: pointer;
+  text-shadow: 0 2px 0 rgba(120, 60, 0, 0.6);
+  box-shadow: 0 5px 0 #8a4d12, 0 8px 14px rgba(0,0,0,0.35);
+  transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.12s;
+  outline: none;
+}
+
+.btn:hover, .btn:focus-visible { filter: brightness(1.1); transform: translateY(-2px); box-shadow: 0 7px 0 #8a4d12, 0 10px 16px rgba(0,0,0,0.35); }
+.btn:active { transform: translateY(3px); box-shadow: 0 2px 0 #8a4d12; }
+
+.btn.secondary { background: linear-gradient(180deg, #7fc6ff 0%, #3d92e0 60%, #2a7bc4 100%); border-color: #1a4d80; box-shadow: 0 5px 0 #1a4d80, 0 8px 14px rgba(0,0,0,0.35); text-shadow: 0 2px 0 rgba(10, 50, 100, 0.6); }
+.btn.secondary:hover { box-shadow: 0 7px 0 #1a4d80, 0 10px 16px rgba(0,0,0,0.35); }
+.btn.secondary:active { box-shadow: 0 2px 0 #1a4d80; }
+
+.btn.small { font-size: 16px; padding: 8px 18px; border-radius: 12px; }
+.btn:disabled { filter: grayscale(0.8) brightness(0.8); cursor: default; transform: none; }
+
+.btn-row { display: flex; gap: 14px; justify-content: center; margin-top: 18px; flex-wrap: wrap; }
+
+/* Star Wars–style intro crawl */
+.crawl-screen { background: #000; overflow: hidden; perspective: 360px; }
+.crawl-sky {
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse at 50% 120%, #1a0a2e 0%, #000 70%);
+}
+.crawl-viewport {
+  position: absolute; inset: 0;
+  display: flex; justify-content: center;
+  transform-style: preserve-3d;
+  transform: rotateX(26deg);
+  mask-image: linear-gradient(to top, transparent 4%, #000 28%, #000 70%, transparent 96%);
+  -webkit-mask-image: linear-gradient(to top, transparent 4%, #000 28%, #000 70%, transparent 96%);
+}
+.crawl-text {
+  position: absolute; top: 100%;
+  width: min(70vw, 620px);
+  color: #ffd24d;
+  font-weight: bold;
+  text-align: center;
+  font-size: clamp(17px, 2.5vw, 26px);
+  line-height: 1.7;
+  animation: crawl 30s linear forwards;
+}
+.crawl-text p { margin-bottom: 1.1em; }
+.crawl-text b { color: #ffe9a0; }
+.crawl-logo {
+  font-size: clamp(34px, 7vw, 72px);
+  -webkit-text-stroke: 2px #7a4a1f;
+  margin-bottom: 0.6em; letter-spacing: 2px;
+}
+@keyframes crawl {
+  0% { top: 100%; }
+  100% { top: -260%; }
+}
+.crawl-skip-hint {
+  position: absolute; bottom: 16px; left: 0; right: 0; text-align: center;
+  color: #fff6; font-size: 13px; letter-spacing: 1px; z-index: 2;
+  animation: hint-fade 2s ease-in-out infinite alternate;
+}
+@keyframes hint-fade { from { opacity: 0.3; } to { opacity: 0.8; } }
+
+/* story interlude */
+.story-card { max-width: min(92vw, 560px); }
+
+.story-art {
+  width: 100%;
+  height: 180px;
+  border-radius: 14px;
+  border: 3px solid var(--panel-border);
+  margin-bottom: 16px;
+  background: #1a1440;
+  overflow: hidden;
+  position: relative;
+}
+
+.story-text {
+  font-size: 18px;
+  line-height: 1.55;
+  margin-bottom: 6px;
+  white-space: pre-line;
+}
+
+.story-speaker { font-size: 15px; font-weight: bold; color: var(--accent-dark); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+
+/* results */
+.results-rows { display: flex; flex-direction: column; gap: 8px; margin: 10px 0 4px; }
+.results-row { display: flex; justify-content: space-between; gap: 30px; font-size: 19px; }
+.results-row .val { font-weight: bold; }
+.results-row.total { border-top: 2px dashed rgba(122,74,31,0.45); padding-top: 8px; font-size: 23px; color: var(--accent-dark); }
+
+.medal-banner { text-align: center; font-size: 21px; margin-top: 10px; font-weight: bold; }
+.medal-banner.medal-gold { color: #ffcf3a; text-shadow: 0 2px 0 #6a4a00, 0 0 12px rgba(255,200,60,0.6); }
+.medal-banner.medal-silver { color: #d7e0ee; text-shadow: 0 2px 0 #4a5260, 0 0 12px rgba(220,230,245,0.5); }
+.medal-banner.medal-bronze { color: #e08a4a; text-shadow: 0 2px 0 #5a3010, 0 0 12px rgba(210,140,70,0.5); }
+.medal-star {
+  display: inline-block;
+  width: 0.9em; height: 0.9em;
+  vertical-align: -0.08em;
+  background: currentColor;
+  clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+}
+
+/* generic center help text */
+.help-text { font-size: 14.5px; line-height: 1.6; }
+.help-text b { color: var(--accent-dark); }
+.key {
+  display: inline-block;
+  border: 2px solid #8a8a9a;
+  border-bottom-width: 4px;
+  border-radius: 6px;
+  background: #f4f4ff;
+  color: #333;
+  padding: 1px 8px;
+  font-size: 13px;
+  font-weight: bold;
+  margin: 0 2px;
+}
+
+/* ----------------------------------------------------------------------
+   Online lobby
+   ---------------------------------------------------------------------- */
+.mp-panel { min-width: min(92vw, 440px); }
+.mp-toast { background: #e04040; color: #fff; font-weight: bold; text-align: center; border-radius: 10px; padding: 8px 12px; margin-bottom: 12px; }
+.mp-namefield { display: flex; align-items: center; gap: 10px; justify-content: center; margin-bottom: 14px; }
+.mp-namefield label { font-weight: bold; color: var(--text-dark); }
+.mp-input { font-family: var(--ui-font); font-size: 17px; padding: 6px 10px; border: 2px solid var(--panel-border); border-radius: 10px; width: 180px; background: #fffdf5; color: var(--text-dark); }
+.mp-rooms { margin: 14px 0; background: rgba(255, 255, 255, 0.5); border: 2px solid rgba(122, 74, 31, 0.4); border-radius: 14px; padding: 10px; max-height: 34vh; overflow-y: auto; }
+.mp-rooms-head { font-weight: bold; color: var(--accent-dark); margin-bottom: 8px; letter-spacing: 1px; text-transform: uppercase; font-size: 14px; }
+.mp-room-empty { color: var(--text-dark); opacity: 0.7; font-size: 14.5px; padding: 6px; }
+.mp-room { display: flex; justify-content: space-between; align-items: center; width: 100%; font-family: var(--ui-font); font-size: 17px; font-weight: bold; color: var(--text-dark); background: linear-gradient(180deg, #fff7e0, #ffe7b0); border: 2px solid #8a4d12; border-radius: 12px; padding: 9px 14px; margin-bottom: 8px; cursor: pointer; }
+.mp-room:hover:not(:disabled) { filter: brightness(1.06); }
+.mp-room:disabled { filter: grayscale(0.6) brightness(0.9); cursor: default; }
+.mp-room-meta { font-size: 14px; opacity: 0.8; }
+.mp-players { display: flex; flex-direction: column; gap: 8px; margin: 6px 0 12px; }
+.mp-player { display: flex; align-items: center; gap: 10px; background: rgba(255, 255, 255, 0.55); border: 2px solid rgba(122, 74, 31, 0.35); border-radius: 12px; padding: 8px 14px; color: var(--text-dark); font-weight: bold; }
+.mp-player.me { background: rgba(255, 140, 26, 0.25); }
+.mp-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid rgba(0,0,0,0.3); flex-shrink: 0; }
+.mp-pname { flex: 1; }
+.mp-pstate { font-size: 14px; color: var(--good); }
+.mp-results { background: rgba(255,255,255,0.6); border: 2px dashed rgba(122,74,31,0.5); border-radius: 14px; padding: 10px 14px; margin-bottom: 14px; }
+.mp-results-title { text-align: center; font-weight: bold; color: var(--accent-dark); font-size: 20px; margin-bottom: 8px; }
+
+/* fade transitions */
+.fade-overlay {
+  position: absolute;
+  inset: 0;
+  background: #060418;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.45s ease;
+  z-index: 50;
+}
+.fade-overlay.on { opacity: 1; pointer-events: auto; }
+
+/* ----------------------------------------------------------------------
+   Touch controls (only on coarse-pointer / touch devices)
+   ---------------------------------------------------------------------- */
+#touch-controls {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none; /* steer drag is handled globally; children opt back in */
+  display: none;
+}
+
+@media (pointer: coarse) {
+  #touch-controls { display: block; }
+}
+
+/* Legacy invisible steer zones — kept as layout hooks but no longer capture
+   input (drag-to-steer now covers the lower play area). Fully transparent and
+   pass-through so the global drag handler sees the touches. */
+.touch-zone {
+  position: absolute;
+  bottom: 0;
+  top: 25%;
+  pointer-events: none;
+  opacity: 0;
+}
+.touch-zone.left  { left: 0; width: 33%; }
+.touch-zone.right { right: 0; width: 33%; }
+.touch-zone.jump  { left: 33%; width: 34%; }
+
+/* Visible FIRE button, bottom-right, thumb-reachable in both orientations.
+   Respects the safe-area inset under notches. */
+.touch-fire {
+  position: absolute;
+  right: calc(env(safe-area-inset-right, 0px) + 18px);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 22px);
+  width: 92px;
+  height: 92px;
+  border-radius: 50%;
+  border: 3px solid #8a2d12;
+  background: radial-gradient(circle at 38% 32%, #ff9a4a 0%, #ff6a1a 52%, #d83c00 100%);
+  color: #fffbe8;
+  font-family: var(--ui-font);
+  font-weight: 900;
+  font-size: 20px;
+  letter-spacing: 1px;
+  text-shadow: 0 2px 0 rgba(120, 40, 0, 0.7);
+  box-shadow: 0 5px 0 #8a2d12, 0 8px 18px rgba(0, 0, 0, 0.45);
+  pointer-events: auto;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  display: none;
+  z-index: 8;
+  user-select: none;
+}
+.touch-fire.active { transform: translateY(3px); box-shadow: 0 2px 0 #8a2d12; filter: brightness(1.15); }
+
+/* small AUTO-fire toggle above the FIRE button */
+.touch-autofire {
+  position: absolute;
+  right: calc(env(safe-area-inset-right, 0px) + 30px);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 124px);
+  min-width: 64px;
+  height: 44px;
+  padding: 0 12px;
+  border-radius: 22px;
+  border: 2px solid #1a4d80;
+  background: linear-gradient(180deg, #7fc6ff 0%, #3d92e0 60%, #2a7bc4 100%);
+  color: #fffbe8;
+  font-family: var(--ui-font);
+  font-weight: bold;
+  font-size: 14px;
+  letter-spacing: 1px;
+  text-shadow: 0 2px 0 rgba(10, 50, 100, 0.6);
+  box-shadow: 0 4px 0 #1a4d80, 0 6px 12px rgba(0, 0, 0, 0.4);
+  pointer-events: auto;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  display: none;
+  z-index: 8;
+  user-select: none;
+  opacity: 0.85;
+}
+.touch-autofire.on { background: linear-gradient(180deg, #b6f0a0 0%, #46b646 60%, #2f8a2f 100%); border-color: #1f5e1f; box-shadow: 0 4px 0 #1f5e1f, 0 6px 12px rgba(0,0,0,0.4); opacity: 1; }
+
+@media (pointer: coarse) {
+  .touch-fire { display: flex; align-items: center; justify-content: center; }
+  .touch-autofire { display: flex; align-items: center; justify-content: center; }
+}
+
+/* shrink the FIRE button a touch in short landscape so it clears the HUD */
+@media (pointer: coarse) and (max-height: 480px) {
+  .touch-fire { width: 76px; height: 76px; font-size: 17px; }
+  .touch-autofire { bottom: calc(env(safe-area-inset-bottom, 0px) + 104px); height: 40px; }
+}
+
+/* ----------------------------------------------------------------------
+   Orientation hint overlay (portrait, touch only)
+   ---------------------------------------------------------------------- */
+#orient-hint {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6vw;
+  background: rgba(6, 4, 24, 0.92);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+#orient-hint[hidden] { display: none; }
+.orient-hint-card {
+  max-width: 340px;
+  text-align: center;
+  color: var(--text-light);
+  background: linear-gradient(160deg, #3a1466, #1c0833);
+  border: 4px solid #6a3aa8;
+  border-radius: 22px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+  padding: 28px 26px;
+}
+.orient-hint-icon { font-size: 54px; line-height: 1; margin-bottom: 12px; animation: orient-rock 1.6s ease-in-out infinite; }
+@keyframes orient-rock { 0%,100% { transform: rotate(-8deg); } 50% { transform: rotate(82deg); } }
+.orient-hint-title { font-size: 22px; font-weight: 900; color: #ffd24d; margin-bottom: 8px; -webkit-text-stroke: 1px #5a2d00; }
+.orient-hint-text { font-size: 16px; line-height: 1.5; opacity: 0.9; margin-bottom: 18px; }
+.orient-hint-btn {
+  font-family: var(--ui-font);
+  font-size: 17px;
+  font-weight: bold;
+  color: var(--text-light);
+  background: linear-gradient(180deg, #ffb340 0%, #ff8c1a 55%, #f07800 100%);
+  border: 3px solid #8a4d12;
+  border-radius: 14px;
+  padding: 12px 26px;
+  min-height: 44px;
+  cursor: pointer;
+  box-shadow: 0 4px 0 #8a4d12, 0 7px 12px rgba(0, 0, 0, 0.35);
+  -webkit-tap-highlight-color: transparent;
+}
+.orient-hint-btn:active { transform: translateY(2px); box-shadow: 0 2px 0 #8a4d12; }
+
+/* ----------------------------------------------------------------------
+   HUD — responsive: shrink the vertical gauges & tighten margins on small
+   screens so they stay clear of the play field.
+   ---------------------------------------------------------------------- */
+@media (max-width: 760px), (max-height: 560px) {
+  .hud-gauge {
+    top: 78px; right: 12px;
+    width: 40px; height: min(40vh, 240px);
+  }
+  .hud-gauge-fill { height: min(40vh, 240px); }
+  .hud-progress-v {
+    top: 78px; left: 12px;
+    width: 36px; height: min(40vh, 240px);
+  }
+  .hud-progress-lit { height: min(40vh, 240px); }
+  .hud-progress-cursor { width: 30px; height: 30px; bottom: -12px; }
+  .hud-progress-cursor:not(.has-sprite) { width: 18px; height: 18px; }
+  .hud-lives { left: 12px; bottom: 10px; gap: 5px; }
+  .hud-lives .life-icon { width: 26px; height: 26px; }
+  .hud-mp { right: 64px; min-width: 120px; font-size: 12px; }
+}
+
+/* keep the bottom-right speedo clear of the FIRE button on touch */
+@media (pointer: coarse) {
+  .hud-speedo { right: 122px; bottom: 22px; }
+}
+@media (pointer: coarse) and (max-height: 480px) {
+  .hud-speedo { right: 100px; bottom: 14px; }
+}
+
+/* ======================================================================
+   RESPONSIVE — phones & small tablets (portrait + landscape)
+   Goal: menus, panels, HUD, buttons, lobby, crawl & star-map all fit and
+   stay legible on a 360–430px-wide phone in BOTH orientations, with tap
+   targets >= 44px.
+   ====================================================================== */
+
+/* ---- narrow viewports (phones, portrait) ----------------------------- */
+@media (max-width: 560px) {
+  .screen { padding: 2vh 3vw; }
+
+  /* let the framed stage use more of the screen on small phones */
+  .stage { width: min(99vw, calc(94vh * (640 / 512))); max-height: 96vh; }
+  .stage-inner { padding: 12% 9% 10%; }
+  .stage-inner.framed { padding: 15% 10% 11% 13%; }
+
+  /* menu buttons: comfortable, full-width, >=44px tall */
+  .btn {
+    font-size: 18px;
+    padding: 13px 22px;
+    min-height: 48px;
+    border-radius: 14px;
+    width: 100%;
+  }
+  .btn.small { font-size: 15px; padding: 10px 16px; min-height: 44px; width: auto; }
+  .btn-row { gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+  .menu-list { gap: 10px; }
+  .title-menu { width: min(82%, 320px); }
+
+  .frame-panel h2 { font-size: clamp(18px, 5vw, 24px); margin-bottom: 10px; }
+  .frame-panel.story-card { padding: 18px 18px; max-width: 94vw; }
+  .story-art { height: 130px; margin-bottom: 12px; }
+  .story-text { font-size: 16px; line-height: 1.45; }
+
+  .results-row { font-size: 16px; gap: 16px; }
+  .results-row.total { font-size: 20px; }
+  .medal-banner { font-size: 18px; }
+
+  .help-text { font-size: 13px; line-height: 1.5; }
+
+  /* online lobby fits a phone */
+  .mp-panel { min-width: 0; width: 94vw; }
+  .mp-input { width: min(60vw, 200px); font-size: 16px; }
+  .mp-rooms { max-height: 40vh; }
+  .mp-room { font-size: 15px; padding: 11px 12px; min-height: 48px; }
+  .mp-player { padding: 10px 12px; min-height: 44px; }
+
+  /* star-map: tighten so the field + star panel both fit */
+  .starmap-screen { padding: 1.5vh 2vw 1.5vh; }
+  .starmap-logo { width: min(58vw, 220px); }
+  .starmap-field { width: 96vw; margin: 2px 0 4px; }
+  .galaxy-node { width: 96px; }
+  .galaxy-plate { width: 72px; height: 72px; }
+  .galaxy-name { font-size: 11px; }
+  .starmap-stars { padding: 8px 12px; gap: 6px; width: 96vw; }
+  .star-list { gap: 9px; }
+  /* stars must stay tappable */
+  .level-star { width: 46px; height: 46px; }
+  .level-star-num { font-size: 16px; }
+
+  /* intro crawl text wider on a narrow screen */
+  .crawl-text { width: min(86vw, 620px); font-size: clamp(15px, 4.4vw, 22px); }
+
+  /* big HUD numbers/messages scale down a bit */
+  .hud-value { font-size: 22px; }
+  .hud-value.big { font-size: 30px; }
+  .hud-message { font-size: clamp(30px, 9vw, 48px); }
+  .hud-countdown { font-size: clamp(70px, 22vw, 110px); }
+  .hud-top { padding: 0 10px; }
+}
+
+/* ---- short viewports (phones, LANDSCAPE) ----------------------------- */
+/* Landscape phones are very short; menus must not overflow vertically. */
+@media (max-height: 480px) {
+  .screen { padding: 1vh 2vw; }
+  .stage { width: min(96vw, calc(96vh * (640 / 512))); max-height: 98vh; }
+  .stage-inner { padding: 9% 9% 8%; }
+  .stage-inner.framed { padding: 11% 10% 9% 13%; }
+
+  /* compact framed panel that scrolls internally rather than overflowing */
+  .frame-panel { max-height: 100%; }
+  .frame-panel.story-card { padding: 14px 18px; max-height: 92vh; overflow-y: auto; }
+  .story-art { height: 92px; margin-bottom: 10px; }
+  .story-text { font-size: 15px; line-height: 1.4; margin-bottom: 4px; }
+
+  .btn { font-size: 17px; padding: 10px 22px; min-height: 44px; }
+  .menu-list { gap: 8px; }
+  .btn-row { margin-top: 10px; gap: 10px; }
+  .frame-panel h2 { font-size: 20px; margin-bottom: 8px; }
+
+  .game-title { font-size: clamp(34px, 11vh, 64px); margin-bottom: 2px; }
+  .game-subtitle { font-size: clamp(12px, 4vh, 18px); margin-bottom: 1vh; }
+
+  /* star-map: lay the field + star strip out for a wide-short screen */
+  .starmap-logo { width: min(30vw, 180px); margin-bottom: 0; }
+  .starmap-title { font-size: clamp(12px, 3.4vh, 16px); margin-bottom: 2px; }
+  .starmap-field { margin: 2px 0; }
+  .galaxy-node { width: 88px; }
+  .galaxy-plate { width: 64px; height: 64px; }
+  .starmap-stars { padding: 6px 12px; gap: 5px; }
+  .starmap-stars-head { font-size: 13px; }
+  .level-star { width: 44px; height: 44px; }
+
+  /* lobby rooms scroll within a shorter area */
+  .mp-rooms { max-height: 30vh; }
+  .mp-namefield { margin-bottom: 8px; }
+
+  .crawl-text { font-size: clamp(14px, 4.4vh, 22px); line-height: 1.5; }
+
+  /* HUD trimmed for the short height */
+  .hud-top { top: 6px; padding: 0 10px; }
+  .hud-value { font-size: 20px; }
+  .hud-value.big { font-size: 26px; }
+  .hud-gauge, .hud-progress-v { top: 64px; height: min(54vh, 220px); }
+  .hud-gauge-fill, .hud-progress-lit { height: min(54vh, 220px); }
+  .hud-message { font-size: clamp(26px, 8vh, 44px); }
+  .hud-countdown { font-size: clamp(56px, 26vh, 96px); }
+}
+
+/* ---- very narrow (small phones, ~360px) ------------------------------ */
+@media (max-width: 380px) {
+  .btn { font-size: 17px; padding: 12px 16px; }
+  .frame-panel.story-card { padding: 16px 14px; }
+  .level-star { width: 44px; height: 44px; }
+  .galaxy-node { width: 88px; }
+  .mp-input { width: 56vw; }
+}

@@ -1,0 +1,237 @@
+{
+ "segments": [
+  "Tutorial 0",
+  "Tutorial 0",
+  "Tutorial 1",
+  "Tutorial 9",
+  "Tutorial 3",
+  "Tutorial 13",
+  "Tutorial 8",
+  "Tutorial 10",
+  "Tutorial 2",
+  "Tutorial 4",
+  "Tutorial 4",
+  "Tutorial 4",
+  "Tutorial 4",
+  "Tutorial 2",
+  "Tutorial 7",
+  "Tutorial 11",
+  "Tutorial 6",
+  "Tutorial 4",
+  "Tutorial 4",
+  "Tutorial 4",
+  "Tutorial 4",
+  "Tutorial 2",
+  "Tutorial 0"
+ ],
+ "steps": [
+  {
+   "name": "Tutorial 0",
+   "at": 0,
+   "len": 121.5,
+   "dur": 5.5,
+   "voice": "TUT1",
+   "msg": "Hi! I'm Turbo the Snail. Steer  with the mouse!",
+   "hasSeg": true
+  },
+  {
+   "name": "Tutorial 0",
+   "at": 121.5,
+   "len": 121.5,
+   "dur": 5,
+   "voice": "TUT2",
+   "msg": "The blue barriers prevent me from falling off the sides of the highway.",
+   "hasSeg": true
+  },
+  {
+   "name": "Tutorial 1",
+   "at": 243,
+   "len": 86.4,
+   "dur": 6,
+   "voice": "TUT3",
+   "msg": "I work for Snail Mail. Help me collect Packages  .",
+   "hasSeg": true
+  },
+  {
+   "name": "Tutorial 9",
+   "at": 329.4,
+   "len": 137.7,
+   "dur": 12,
+   "voice": "TUT4",
+   "msg": "Asteroids slow me down.  Hold the Mouse Button  to shoot",
+   "hasSeg": true
+  },
+  {
+   "name": "Tutorial 3",
+   "at": 467.1,
+   "len": 126.9,
+   "dur": 10,
+   "voice": "TUT5",
+   "msg": "Don't let me fall through the holes in the highway!",
+   "hasSeg": true
+  },
+  {
+   "name": "Tutorial 13",
+   "at": 594,
+   "len": 140.4,
+   "dur": 6,
+   "voice": "TUT6",
+   "msg": "Salt  burns me! I can't shoot  I have to avoid it!",
+   "hasSeg": true
+  },
+  {
+   "name": "Tutorial 8",
+   "at": 734.4,
+   "len": 140.4,
+   "dur": 4.5,
+   "voice": "TUT18",
+   "msg": "More  Salt! If I take too much damage I go postal!",
+   "hasSeg": true
+  },
+  {
+   "name": "Tutorial 10",
+   "at": 874.8,
+   "len": 172.8,
+   "dur": 5,
+   "voice": "TUT7",
+   "msg": "Hearts  restore my Postal Meter located on the right.",
+   "hasSeg": true
+  },
+  {
+   "name": "Tutorial 2",
+   "at": 1047.6,
+   "len": 199.8,
+   "dur": 5,
+   "voice": "TUT8",
+   "msg": "Look Out! Evil  try to knock me off the highway",
+   "hasSeg": true
+  },
+  {
+   "name": "Tutorial 4",
+   "at": 1247.4,
+   "len": 116.1,
+   "dur": 7,
+   "voice": "TUT9",
+   "msg": "I get better weapons  when I go through  !",
+   "hasSeg": true
+  },
+  {
+   "name": "Tutorial 4",
+   "at": 1363.5,
+   "len": 116.1,
+   "dur": 0,
+   "voice": null,
+   "msg": null,
+   "hasSeg": true
+  },
+  {
+   "name": "Tutorial 4",
+   "at": 1479.6,
+   "len": 116.1,
+   "dur": 5,
+   "voice": "TUT10",
+   "msg": "Lasers or Rockets, I can destroy",
+   "hasSeg": true
+  },
+  {
+   "name": "Tutorial 4",
+   "at": 1595.7,
+   "len": 116.1,
+   "dur": 0,
+   "voice": null,
+   "msg": null,
+   "hasSeg": true
+  },
+  {
+   "name": "Tutorial 2",
+   "at": 1711.8,
+   "len": 199.8,
+   "dur": 5,
+   "voice": "TUT11",
+   "msg": "If I have Lasers shoot the",
+   "hasSeg": true
+  },
+  {
+   "name": "Tutorial 7",
+   "at": 1911.6,
+   "len": 153.9,
+   "dur": 4,
+   "voice": "TUT12",
+   "msg": "Steer clear of ; rings They slow me down!",
+   "hasSeg": true
+  },
+  {
+   "name": "Tutorial 11",
+   "at": 2065.5,
+   "len": 153.9,
+   "dur": 4,
+   "voice": "TUT13",
+   "msg": "Yellow Rings they blow up my enemies!",
+   "hasSeg": true
+  },
+  {
+   "name": "Tutorial 6",
+   "at": 2219.4,
+   "len": 197.1,
+   "dur": 5,
+   "voice": "TUT14",
+   "msg": "I can't blow up Turrets so guide me around them!",
+   "hasSeg": true
+  },
+  {
+   "name": "Tutorial 4",
+   "at": 2416.5,
+   "len": 116.1,
+   "dur": 12,
+   "voice": "TUT15",
+   "msg": "If I grab enough  I will become invincible!",
+   "hasSeg": true
+  },
+  {
+   "name": "Tutorial 4",
+   "at": 2532.6,
+   "len": 116.1,
+   "dur": 0,
+   "voice": null,
+   "msg": null,
+   "hasSeg": true
+  },
+  {
+   "name": "Tutorial 4",
+   "at": 2648.7,
+   "len": 116.1,
+   "dur": 0,
+   "voice": null,
+   "msg": null,
+   "hasSeg": true
+  },
+  {
+   "name": "Tutorial 4",
+   "at": 2764.8,
+   "len": 116.1,
+   "dur": 0,
+   "voice": null,
+   "msg": null,
+   "hasSeg": true
+  },
+  {
+   "name": "Tutorial 2",
+   "at": 2880.9,
+   "len": 199.8,
+   "dur": 5,
+   "voice": "TUT16",
+   "msg": "I can plow through  when I'm invincible.",
+   "hasSeg": true
+  },
+  {
+   "name": "Tutorial 0",
+   "at": 3080.7,
+   "len": 121.5,
+   "dur": 5,
+   "voice": "TUT17",
+   "msg": "Excellent. Time to hit the Post Office.",
+   "hasSeg": true
+  }
+ ],
+ "totalLen": 3202
+}

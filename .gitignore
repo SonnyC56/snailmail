@@ -1,0 +1,14 @@
+node_modules/
+dist/
+*.log
+
+# Build/runtime artifacts
+test/shots/
+
+# Original game files + extracted assets are the user's own copy of the game.
+# They are NOT redistributed in the repo — regenerate locally with
+#   bash tools/stage_assets.sh "path/to/SnailMail.dat"
+exe_src/
+extracted/
+public/assets/
+assets-hd/

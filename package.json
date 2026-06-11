@@ -1,0 +1,32 @@
+{
+  "name": "snailmail",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SonnyC56/snailmail.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/SonnyC56/snailmail/issues"
+  },
+  "homepage": "https://github.com/SonnyC56/snailmail#readme",
+  "dependencies": {
+    "three": "^0.184.0",
+    "ws": "^8.21.0"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^25.1.0",
+    "vite": "^8.0.16"
+  }
+}
