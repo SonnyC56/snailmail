@@ -219,6 +219,25 @@ export class Track {
     return true;
   }
 
+  /** Lateral drivable extent {min,max} at distance s — the line the side
+   *  barriers (slipstream walls) sit on. Returns null when the road is fully
+   *  absent across the row (a gap you must jump). The original keeps you ON the
+   *  track via these walls; you only fall at gaps. */
+  drivableExtent(s) {
+    if (this.cells) {
+      const row = Math.floor(s / this.rowUnits);
+      if (row < 0 || row >= this.cells.length) return { min: -GRID_X_EDGE, max: GRID_X_EDGE };
+      let lo = null, hi = null;
+      for (let c = 0; c < GRID_COLS; c++) {
+        const ch = this.cells[row][c];
+        if (ch !== ' ' && ch !== '@' && ch !== undefined) { const x = gridColToX(c); if (lo === null) lo = x; hi = x; }
+      }
+      return lo === null ? null : { min: lo, max: hi };
+    }
+    for (const g of this.gaps) if (s >= g.start && s <= g.end) return null;
+    return { min: -this.halfWidth + 0.6, max: this.halfWidth - 0.6 };
+  }
+
   nextGap(s) {
     let best = Infinity;
     for (const g of this.gaps) if (g.start > s) best = Math.min(best, g.start - s);
@@ -377,22 +396,46 @@ export class Track {
   /** Glowing trim tubes running along both edges of the ribbon. */
   _buildEdges(theme) {
     const group = new THREE.Group();
-    const mat = new THREE.MeshBasicMaterial({ color: theme.rail });
-    for (const sign of [-1, 1]) {
+    const railMat = new THREE.MeshBasicMaterial({ color: theme.rail });
+    // blue slipstream barrier walls that keep you on the track — they hug the
+    // drivable edge and break only at gaps (where you can fall).
+    const wallMat = new THREE.MeshBasicMaterial({
+      color: 0x5aa6ff, transparent: true, opacity: 0.34, side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    const WALL_H = 1.15;
+    for (const which of ['min', 'max']) {
       let pts = [];
+      const positions = [], indices = [];
       const flush = () => {
         if (pts.length > 1) {
           const curve = new THREE.CatmullRomCurve3(pts);
-          const geo = new THREE.TubeGeometry(curve, Math.max(8, pts.length * 2), 0.18, 5, false);
-          group.add(new THREE.Mesh(geo, mat));
+          const geo = new THREE.TubeGeometry(curve, Math.max(8, pts.length * 2), 0.14, 5, false);
+          group.add(new THREE.Mesh(geo, railMat));
         }
         pts = [];
       };
+      let prev = false;
       for (let s = 0; s <= this.length; s += RING_STEP * 2) {
-        if (!this.hasSurface(s)) { flush(); continue; }
-        pts.push(this.surfacePoint(s, sign * this.halfWidth));
+        const ext = this.drivableExtent(s);
+        if (!ext) { flush(); prev = false; continue; }       // gap: no barrier here
+        const fr = this.frameAt(s);
+        const ex = which === 'min' ? ext.min : ext.max;
+        const base = fr.pos.clone().addScaledVector(fr.side, ex);
+        const top = base.clone().addScaledVector(fr.up, WALL_H);
+        pts.push(top.clone());
+        const bi = positions.length / 3;
+        positions.push(base.x, base.y, base.z, top.x, top.y, top.z);
+        if (prev) indices.push(bi - 2, bi - 1, bi, bi - 1, bi + 1, bi);
+        prev = true;
       }
       flush();
+      if (positions.length) {
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+        geo.setIndex(indices);
+        group.add(new THREE.Mesh(geo, wallMat));
+      }
     }
     return group;
   }

@@ -213,10 +213,13 @@ export class Player {
     this._steer(dt, input);
     this._tryFire(input);
 
-    // off the edge → fall (no rails)
-    if (Math.abs(this.x) > this.track.halfWidth + 0.4) { this._startFall(); return; }
-    // ran onto a gap → fall (unless jetpack covers it, handled in FLYING)
-    if (!this.track.hasSurface(this.s, this.x)) { this._startFall(); return; }
+    // Side barriers (slipstream walls): you can't fall off the sides — you're
+    // clamped to the drivable width. You only fall where the road is absent
+    // across the row (a gap to jump). Matches the original.
+    const ext = this.track.drivableExtent(this.s);
+    if (!ext) { this._startFall(); return; }            // gap row → fall
+    if (this.x < ext.min) { this.x = ext.min; this.xVel = Math.max(0, this.xVel); }
+    else if (this.x > ext.max) { this.x = ext.max; this.xVel = Math.min(0, this.xVel); }
   }
 
   /** Ballistic hop launched by a jump pod / ramp. */
