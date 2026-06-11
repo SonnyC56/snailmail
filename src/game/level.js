@@ -129,6 +129,7 @@ export class Level {
           for (const k of killed) { this.score += KILL_PTS[k.type] ?? 100; this.fx.burst(k.mesh.position, 0xffd24d, 14, { speed: 7 }); }
           this.kills += killed.length;
           a.boost(); this.cam.addShake(0.5);
+          this.fx.flash(pos, 'PARTICLERING-BIG', { color: 0xffe27a, size: 3, size1: 11, life: 0.55, spin: 3 });
           this._emit('smartbomb', { count: killed.length, pos });
           break;
         }
@@ -159,6 +160,7 @@ export class Level {
         case 'ringRed':
           P.slow(2.2); a.hit();
           this.fx.burst(pos, 0xe04040, 10, { speed: 3 });
+          this.fx.flash(pos, 'PARTICLESLOW-BIG', { color: 0xff6a6a, size: 2.4, size1: 6.5, life: 0.5, spin: -2 });
           this._emit('slowed', { pos });
           break;
       }
@@ -183,10 +185,12 @@ export class Level {
           // slug destroyed: purple goo burst + squish sound + a taunt
           this.fx.burst(e.mesh.position, 0x9a4ecf, 22, { speed: 8 });
           this.fx.burst(e.mesh.position, 0x6a2a9a, 14, { speed: 4, life: 0.5 });
+          this.fx.flash(e.mesh.position, 'PARTICLEEXPLODE-SMALL', { color: 0xb86aff, size: 1.8, size1: 4.5, life: 0.4 });
           a.hit(); a.voiceSet('enemies', { gap: 7 });
         } else {
           const col = e.type === 'turret' ? 0xff8866 : 0x8a7a6a;
           this.fx.burst(e.mesh.position, col, e.type === 'turret' ? 22 : 14, { speed: 7 });
+          this.fx.flash(e.mesh.position, e.type === 'turret' ? 'PARTICLEEXPLODE-BIG' : 'PARTICLEEXPLODE-SMALL', { color: e.type === 'turret' ? 0xffaa55 : 0xc8b89a, size: 2.2, size1: e.type === 'turret' ? 7 : 5, life: 0.45 });
           if (e.type === 'turret') this.cam.addShake(0.25);
         }
       } else {

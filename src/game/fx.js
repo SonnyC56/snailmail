@@ -1,36 +1,60 @@
 /**
- * Lightweight particle bursts (Points-based) for pickups, crashes, boosts.
+ * Particle FX. Two layers, both using the original SPRITES/ art:
+ *  - a pooled THREE.Points cloud textured with the original SPARK glow (soft
+ *    additive sparks for pickups/hits/crashes), and
+ *  - expanding billboard "flashes" using the original PARTICLEEXPLODE /
+ *    PARTICLERING / PARTICLESLOW sheets for big signature bursts.
  */
 
 import * as THREE from 'three';
+import { assets } from '../assets.js';
 
 const MAX_PARTICLES = 600;
+const MAX_FLASHES = 32;
 
 export class ParticleFX {
   constructor(scene) {
+    this.scene = scene;
     this.geo = new THREE.BufferGeometry();
     this.positions = new Float32Array(MAX_PARTICLES * 3);
     this.colors = new Float32Array(MAX_PARTICLES * 3);
     this.geo.setAttribute('position', new THREE.BufferAttribute(this.positions, 3));
     this.geo.setAttribute('color', new THREE.BufferAttribute(this.colors, 3));
 
+    // textured with the original SPARK sprite + additive blending so bursts
+    // read as soft glowing particles instead of flat squares.
     this.points = new THREE.Points(this.geo, new THREE.PointsMaterial({
-      size: 0.35,
+      size: 0.55,
+      map: assets.texture('SPRITES/SPARK'),
       vertexColors: true,
       transparent: true,
       opacity: 0.95,
       depthWrite: false,
+      blending: THREE.AdditiveBlending,
       sizeAttenuation: true,
     }));
     this.points.frustumCulled = false;
     scene.add(this.points);
 
-    // particle pool
     this.parts = [];
     for (let i = 0; i < MAX_PARTICLES; i++) {
       this.parts.push({ alive: false, pos: new THREE.Vector3(), vel: new THREE.Vector3(), life: 0, maxLife: 1, col: new THREE.Color() });
     }
     this._cursor = 0;
+
+    // expanding billboard flashes (original burst sheets)
+    this.flashGroup = new THREE.Group();
+    this.flashGroup.frustumCulled = false;
+    scene.add(this.flashGroup);
+    this.flashes = [];
+    for (let i = 0; i < MAX_FLASHES; i++) {
+      const mat = new THREE.SpriteMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 });
+      const sp = new THREE.Sprite(mat);
+      sp.visible = false;
+      this.flashGroup.add(sp);
+      this.flashes.push({ sp, alive: false, life: 0, maxLife: 1, size0: 1, size1: 2, spin: 0 });
+    }
+    this._fcursor = 0;
   }
 
   /**
@@ -60,6 +84,29 @@ export class ParticleFX {
     }
   }
 
+  /**
+   * Spawn an expanding additive billboard from an original sprite sheet.
+   * @param pos      world position
+   * @param sprite   logical path under SPRITES/ (e.g. 'PARTICLEEXPLODE-BIG')
+   * @param opts     { size, size1, life, color, spin }
+   */
+  flash(pos, sprite, opts = {}) {
+    const f = this.flashes[this._fcursor];
+    this._fcursor = (this._fcursor + 1) % MAX_FLASHES;
+    f.alive = true;
+    f.life = f.maxLife = opts.life ?? 0.45;
+    f.size0 = opts.size ?? 2.2;
+    f.size1 = opts.size1 ?? f.size0 * 2.4;
+    f.spin = opts.spin ?? 0;
+    f.sp.position.copy(pos);
+    f.sp.material.map = assets.texture(`SPRITES/${sprite}`);
+    f.sp.material.color.set(opts.color ?? 0xffffff);
+    f.sp.material.opacity = 1;
+    f.sp.material.rotation = 0;
+    f.sp.scale.setScalar(f.size0);
+    f.sp.visible = true;
+  }
+
   update(dt) {
     let i3 = 0;
     for (let i = 0; i < MAX_PARTICLES; i++) {
@@ -81,18 +128,30 @@ export class ParticleFX {
         this.colors[i3 + 1] = p.col.g * f;
         this.colors[i3 + 2] = p.col.b * f;
       } else {
-        // park dead particles far away
         this.positions[i3 + 1] = -9999;
       }
       i3 += 3;
     }
     this.geo.attributes.position.needsUpdate = true;
     this.geo.attributes.color.needsUpdate = true;
+
+    // expanding flashes: grow + fade then park
+    for (const f of this.flashes) {
+      if (!f.alive) continue;
+      f.life -= dt;
+      if (f.life <= 0) { f.alive = false; f.sp.visible = false; continue; }
+      const e = 1 - f.life / f.maxLife;            // 0→1
+      f.sp.scale.setScalar(f.size0 + (f.size1 - f.size0) * e);
+      f.sp.material.opacity = 1 - e * e;           // ease-out fade
+      if (f.spin) f.sp.material.rotation += f.spin * dt;
+    }
   }
 
   dispose(scene) {
     scene.remove(this.points);
+    scene.remove(this.flashGroup);
     this.geo.dispose();
     this.points.material.dispose();
+    for (const f of this.flashes) f.sp.material.dispose();
   }
 }
