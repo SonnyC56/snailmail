@@ -407,9 +407,12 @@ export class EntityManager {
       this.entities.push(e);
       const orig = ORIGINAL_MESH[d.type];
       if (orig) {
-        // pillars/signs vary their mesh per-entity for path variety
+        // pillars/signs vary their mesh per-entity for path variety; fence
+        // posts use one consistent narrow post so a fence reads as a fence.
         let spec = orig;
-        if (d.type === 'pillar') spec = { ...orig, name: PILLAR_VARIANTS[Math.floor(Math.abs(d.s * 0.37)) % PILLAR_VARIANTS.length] };
+        if (d.type === 'pillar') spec = d.fence
+          ? { ...orig, name: 'PILLAR1', scale: 0.7 }
+          : { ...orig, name: PILLAR_VARIANTS[Math.floor(Math.abs(d.s * 0.37)) % PILLAR_VARIANTS.length] };
         else if (d.type === 'sign') spec = { ...orig, name: SIGN_VARIANTS[Math.floor(Math.abs(d.s * 0.29)) % SIGN_VARIANTS.length] };
         this._swapOriginalMesh(e, spec);
       }

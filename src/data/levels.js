@@ -263,6 +263,7 @@ export function entitiesForLevel(level, track, mode = 'story') {
     if (o.type === 'slug') def.patrol = 0;
     if (o.type === 'turret') def.hp = 3 + Math.floor(level.difficulty * 2);
     if (o.type === 'asteroid') def.hp = 2;
+    if (o.fence) def.fence = true;          // fence-post pillar (consistent narrow post)
     if (o.type === 'package') { gridPackages.push(def); continue; }   // place exactly Parcels of these
     ents.push(def);
   }

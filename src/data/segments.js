@@ -175,6 +175,10 @@ export function parseSegment(textOrParsed) {
       } else if (type === 'jumppod') {
         objects.push({ type: 'jumppod', s, x: 0 });
         hasBoost = true;
+      } else if (type === 'pillar') {
+        // grid pillars come only from '|' fence posts — tag them so a fence row
+        // reads as a line of matching posts (not a random pillar field).
+        objects.push({ type, s, x, fence: true });
       } else {
         objects.push({ type, s, x });
       }
@@ -312,7 +316,7 @@ export function buildLevelLayout(meta) {
     const isPath = grid.some((row) => /[Pp]/.test(row));
     if (isPath) addPathFeature(paths, rolls, pathFamily(pathTypeOf(seg)), offset, seg.length);
     else for (const g of seg.gaps) gaps.push({ at: g.at + offset, len: g.len, construction });
-    for (const o of seg.objects) entities.push({ type: o.type, s: o.s + offset, x: o.x });
+    for (const o of seg.objects) entities.push({ type: o.type, s: o.s + offset, x: o.x, ...(o.fence ? { fence: true } : {}) });
     for (const row of grid) {
       let cell = row.padEnd(GRID_COLS, ' ').slice(0, GRID_COLS);
       // a '@@@@@@@@' border-cap row is a segment frame marker, not a wall in the
@@ -338,7 +342,7 @@ export function assembleSegments(names) {
     const grid = seg.grid || (seg.rows || []).map((r) => r.slice(1, 9).padEnd(GRID_COLS, ' '));
     const isPath = grid.some((row) => /[Pp]/.test(row));
     if (!isPath) for (const g of seg.gaps) gaps.push({ at: g.at + offset, len: g.len });
-    for (const o of seg.objects) entities.push({ type: o.type, s: o.s + offset, x: o.x });
+    for (const o of seg.objects) entities.push({ type: o.type, s: o.s + offset, x: o.x, ...(o.fence ? { fence: true } : {}) });
     for (const row of grid) {
       let cell = row.padEnd(GRID_COLS, ' ').slice(0, GRID_COLS);
       if (/^@+$/.test(cell)) cell = '.'.repeat(GRID_COLS);
