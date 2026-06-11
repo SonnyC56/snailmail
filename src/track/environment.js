@@ -32,10 +32,45 @@ export class Environment {
       const tex = assets.texture(`BACKGROUNDS/${theme.background}`, { wrap: true });
       const geo = new THREE.SphereGeometry(620, 32, 20);
       const mat = new THREE.MeshBasicMaterial({ map: tex, side: THREE.BackSide, fog: false, depthWrite: false });
+      // Animated nebula warp: inject a time-driven, multi-octave UV wobble into
+      // the basic material via onBeforeCompile. The displacement amount is
+      // scaled by theme.distort so each theme churns at its intended strength.
+      this._skyUniforms = {
+        uTime: { value: 0 },
+        // theme.distort values (5/10/10/20) -> gentle UV displacement amount
+        uDistort: { value: (theme.distort ?? 14) / 1000 },
+      };
+      mat.onBeforeCompile = (shader) => {
+        shader.uniforms.uTime = this._skyUniforms.uTime;
+        shader.uniforms.uDistort = this._skyUniforms.uDistort;
+        shader.vertexShader = shader.vertexShader
+          .replace(
+            '#include <common>',
+            `#include <common>
+            uniform float uTime;
+            uniform float uDistort;`,
+          )
+          .replace(
+            '#include <uv_vertex>',
+            `#include <uv_vertex>
+            #ifdef USE_MAP
+              // Two crossing sine waves at different frequencies/phases make the
+              // sky slowly churn/swirl rather than uniformly pan. Driven per-UV
+              // so different parts of the nebula warp in different directions.
+              float w1 = sin(vMapUv.y * 6.2831 + uTime * 0.35)
+                       + sin(vMapUv.x * 9.4 - uTime * 0.21);
+              float w2 = cos(vMapUv.x * 6.2831 - uTime * 0.27)
+                       + cos(vMapUv.y * 11.3 + uTime * 0.17);
+              vMapUv += vec2(w1, w2) * uDistort;
+            #endif`,
+          );
+      };
+      // Bust three's program cache so the recompiled shader is actually used.
+      mat.customProgramCacheKey = () => 'nebula-warp';
       this.sky = new THREE.Mesh(geo, mat);
       this.sky.renderOrder = -1;
       this.group.add(this.sky);
-      this._distort = (theme.distort ?? 14) / 100;  // wobble amount
+      this._distort = (theme.distort ?? 14) / 100;  // wobble amount (sky drift)
       this._skyTex = tex;
       return; // stars + planets render in front for depth
     }
@@ -227,8 +262,10 @@ export class Environment {
     if (this.sky) {
       this.sky.position.copy(cameraPos);
       this.sky.rotation.y += dt * 0.012;        // slow drift
-      if (this._skyTex && this._distort) {        // shimmering distortion
-        const d = this._distort * 0.04;
+      // Advance the shader warp clock so the nebula UVs churn over time.
+      if (this._skyUniforms) this._skyUniforms.uTime.value = this._t;
+      if (this._skyTex && this._distort) {        // slow shimmer pan on top of warp
+        const d = this._distort * 0.02;
         this._skyTex.offset.set(Math.sin(this._t * 0.13) * d, Math.cos(this._t * 0.09) * d * 0.6);
         this._skyTex.needsUpdate = true;
       }

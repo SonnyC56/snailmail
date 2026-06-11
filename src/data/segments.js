@@ -30,6 +30,13 @@ export const GRID_COLS = 8;          // interior lanes
 const LANE_HALF = (GRID_COLS - 1) / 2; // 3.5
 export const X_EDGE = 5;             // lateral half-range we map columns into (halfWidth-1)
 
+// A gap this short (in grid rows) is a SEGMENT-END RAMP, not a chasm: the row
+// or two of blank between two authored segments is just a seam, so we fill it
+// back in as road (the snail rolls over a small rise) instead of treating it
+// like an authored jump-pad launch. Only genuinely wide gaps (a hole you must
+// clear) or an explicit jump-pad glyph ('J'/'(') get the launch behaviour.
+const RAMP_GAP_ROWS = 2;             // <= 2 rows (~5.4u) → fill as a rollover ramp
+
 // Symbol -> meaning. entity types match EntityManager's valid set; geometry
 // symbols (road/gap/path) drive gaps + length rather than spawning an entity.
 //   kind: 'road' (drivable), 'gap' (no road), 'wall' (border), 'path' (spline,
@@ -62,26 +69,45 @@ function pathFamily(type) {
   if (/slalom|snake|sweep|wibble/.test(t)) return 'slalom';
   return 'flat';   // toad/supertramp/worm/warp/start/P0-2 → keep continuous road
 }
-/** Record a path segment as a spline feature or a roll feature. Deterministic
- *  (sign derived from `at`) so every client rebuilds the identical track.
+/** Record a path segment as a spline feature and/or a roll feature.
  *
- *  Roll features (corkscrew / invert / halfpipe) bank the flat ribbon about its
- *  own tangent via Track._rollAt rather than bending the spline:
- *   - corkscrew → a CONTINUOUS full 360° twist (cork:true): the road spirals all
- *     the way over and lands upright at the exit.
- *   - invert    → also a continuous 360° roll (cork:true): a turnover that rolls
- *     through full inversion and returns upright over the feature length, rather
- *     than tipping to 180° and back (which never actually carries you over).
+ *  Roll features bank the flat ribbon about its own tangent via Track._rollAt
+ *  rather than bending the spline:
+ *   - corkscrew → a CONTINUOUS full twist (cork:true): the road spirals over and
+ *     lands upright at the exit.
+ *   - invert    → also a continuous roll (cork:true): a turnover that rolls
+ *     through inversion and returns upright over the feature length.
  *   - halfpipe  → a there-and-back BANK (cork:false): rolls up to ~52° at the
  *     midpoint then settles smoothly back to flat (a U-shaped wall transition).
+ *   - worm      → a continuous corkscrew (cork:true) ONLY when authored — the
+ *     base "flat" family carries no roll, the per-instance Angle= drives it.
+ *   - wibble    → in addition to its slalom spline, an authored Angle= adds a
+ *     there-and-back BANK (cork:false) of that magnitude (a leaned sweep).
  *  Track._rollAt eases the roll RATE from/to zero at both ends, so every one of
- *  these is C1-continuous at the feature boundaries (no snap on/off). */
-function addPathFeature(paths, rolls, fam, at, len) {
+ *  these is C1-continuous at the feature boundaries (no snap on/off).
+ *
+ *  `angle` is the ORIGINAL per-instance roll magnitude in degrees (already
+ *  signed) baked from the segment's Angle= annotation, or null/undefined when
+ *  unannotated. When present it OVERRIDES the deg/sign heuristic with the
+ *  authored value (its sign too); the path-shaping `{at,len,family}` is
+ *  unchanged. When absent we fall back to the position-derived heuristic so
+ *  every client still rebuilds the identical track. */
+function addPathFeature(paths, rolls, fam, at, len, angle) {
   const sign = (Math.floor(at / 7) % 2) ? 1 : -1;
-  if (fam === 'corkscrew') rolls.push({ at, len, deg: sign * 360, cork: true });
-  else if (fam === 'invert') rolls.push({ at, len, deg: sign * 360, cork: true });
-  else if (fam === 'halfpipe') rolls.push({ at, len, deg: sign * 52, cork: false });
-  else if (fam === 'loop' || fam === 'hill' || fam === 'valley' || fam === 'slalom') paths.push({ at, len, family: fam });
+  const authored = Number.isFinite(angle);
+  if (fam === 'corkscrew') rolls.push({ at, len, deg: authored ? angle : sign * 360, cork: true });
+  else if (fam === 'invert') rolls.push({ at, len, deg: authored ? angle : sign * 360, cork: true });
+  else if (fam === 'halfpipe') rolls.push({ at, len, deg: authored ? angle : sign * 52, cork: false });
+  else if (fam === 'loop' || fam === 'hill' || fam === 'valley' || fam === 'slalom') {
+    paths.push({ at, len, family: fam });
+    // An angled slalom (Wibble) leans into its sweep: add a banked roll on top
+    // of the spline shape, using the authored magnitude+sign.
+    if (authored) rolls.push({ at, len, deg: angle, cork: false });
+  } else if (authored) {
+    // A "flat" family (Worm, …) carries no roll by default; an authored Angle=
+    // turns it into a continuous corkscrew of that magnitude+sign.
+    rolls.push({ at, len, deg: angle, cork: true });
+  }
 }
 
 // grid char -> entity type (null = not a spawnable entity)
@@ -266,7 +292,13 @@ export function buildLevelLayout(meta) {
 
   const first = chain.first ? getSegment(chain.first) : null;
   const last = chain.last ? getSegment(chain.last) : null;
-  const pool = chain.segments.map(getSegment).filter(Boolean);
+  // Pair each pooled segment with its baked per-instance roll angle (degrees,
+  // already signed; null when unannotated). Keep the angle attached BEFORE the
+  // null-filter so the chain index → segAngles[i] correspondence is preserved.
+  const segAngles = chain.segAngles || [];
+  const pool = chain.segments
+    .map((name, i) => ({ seg: getSegment(name), angle: segAngles[i] ?? null }))
+    .filter((e) => e.seg);
   if (pool.length === 0 && !first && !last) return null;
 
   // Length budget: the engine chains body segments until cumulative forward
@@ -287,6 +319,7 @@ export function buildLevelLayout(meta) {
   //    is the authored track; do NOT length-cap it (that's what made every
   //    level the same length).
   //  - Random:yes → draw from the pool (seeded) until ~Length world units.
+  // body entries are { seg, angle } pairs (angle = authored roll, or null).
   let body;
   if (!chain.random) {
     body = pool.slice(); // listed order, once = the real authored level
@@ -299,18 +332,19 @@ export function buildLevelLayout(meta) {
     while (body.length < 400) {
       if (cursor >= cap && body.length >= pool.length) break;
       if (budget === Infinity && i >= order.length) break;
-      const seg = order[i % order.length];
-      body.push(seg);
-      cursor += seg.length;
+      const e = order[i % order.length];
+      body.push(e);
+      cursor += e.seg.length;
       i++;
     }
   }
 
-  // assemble: first + body + last, accumulating an offset per segment
+  // assemble: first + body + last, accumulating an offset per segment. Each
+  // entry pairs the parsed segment with its authored per-instance roll angle.
   const segs = [];
-  if (first) segs.push(first);
+  if (first) segs.push({ seg: first, angle: chain.firstAngle ?? null });
   segs.push(...body);
-  if (last) segs.push(last);
+  if (last) segs.push({ seg: last, angle: chain.lastAngle ?? null });
 
   const gaps = [];
   const entities = [];
@@ -318,7 +352,7 @@ export function buildLevelLayout(meta) {
   const paths = [];          // 3D spline features (loop/hill/valley/slalom)
   const rolls = [];          // tangent-roll features (corkscrew/invert/halfpipe)
   let offset = 0;
-  for (const seg of segs) {
+  for (const { seg, angle } of segs) {
     const construction = /construction/i.test(seg.name);
     const grid = seg.grid || (seg.rows || []).map((r) => r.slice(1, 9).padEnd(GRID_COLS, ' '));
     // A segment with 'P' control rows is a 3D PATH/curve section (loop, half-
@@ -326,15 +360,24 @@ export function buildLevelLayout(meta) {
     // fall-gap. We reconstruct the 3D shape by FAMILY and keep the road footprint
     // continuous (suppress its "gaps"). Non-path segments keep their real gaps.
     const isPath = grid.some((row) => /[Pp]/.test(row));
-    if (isPath) addPathFeature(paths, rolls, pathFamily(pathTypeOf(seg)), offset, seg.length);
-    else for (const g of seg.gaps) gaps.push({ at: g.at + offset, len: g.len, construction });
+    // Short gaps between/within authored segments are seams, not chasms: roll
+    // over them (fill as road) instead of launching. Only real chasms become
+    // fall gaps + jump pads. Path segments carry no fall gaps at all.
+    let rampRows = null;
+    if (isPath) addPathFeature(paths, rolls, pathFamily(pathTypeOf(seg)), offset, seg.length, angle);
+    else {
+      const { chasms, rampRows: rr } = classifyGaps(seg.gaps);
+      rampRows = rr;
+      for (const g of chasms) gaps.push({ at: g.at + offset, len: g.len, construction });
+    }
     for (const o of seg.objects) entities.push({ type: o.type, s: o.s + offset, x: o.x, ...(o.fence ? { fence: true } : {}) });
-    for (const row of grid) {
-      let cell = row.padEnd(GRID_COLS, ' ').slice(0, GRID_COLS);
+    for (let r = 0; r < grid.length; r++) {
+      let cell = grid[r].padEnd(GRID_COLS, ' ').slice(0, GRID_COLS);
       // a '@@@@@@@@' border-cap row is a segment frame marker, not a wall in the
       // road — the road runs continuously through it.
       if (/^@+$/.test(cell)) cell = '.'.repeat(GRID_COLS);
       if (isPath) cell = cell.replace(/ /g, '.');     // path-curve air → continuous road
+      else if (rampRows && rampRows.has(r)) cell = '.'.repeat(GRID_COLS);  // seam → rollover ramp
       cells.push(cell);
     }
     offset += seg.length;
@@ -345,6 +388,28 @@ export function buildLevelLayout(meta) {
 /** True if a grid cell char is drivable road (anything but the void / wall). */
 export function isDrivableCell(ch) { return ch !== ' ' && ch !== '@' && ch !== undefined; }
 
+/**
+ * Split a segment's coalesced gaps into RAMPS (short seams to roll over) and
+ * real CHASMS (wide holes to launch over). Returns the chasms (kept as fall
+ * gaps + jump pads) plus a set of grid-row indices belonging to ramps, so the
+ * caller can fill those rows back in as road. Gap lengths are integer multiples
+ * of ROW_UNITS, so len/ROW_UNITS is the row span.
+ */
+function classifyGaps(gaps) {
+  const chasms = [];
+  const rampRows = new Set();
+  for (const g of gaps) {
+    const rowSpan = Math.round(g.len / ROW_UNITS);
+    if (rowSpan <= RAMP_GAP_ROWS) {
+      const r0 = Math.round(g.at / ROW_UNITS);
+      for (let r = r0; r < r0 + rowSpan; r++) rampRows.add(r);
+    } else {
+      chasms.push(g);
+    }
+  }
+  return { chasms, rampRows };
+}
+
 /** Assemble a list of named segments into a level layout (shared by tutorial). */
 export function assembleSegments(names) {
   const segs = names.map(getSegment).filter(Boolean);
@@ -353,12 +418,18 @@ export function assembleSegments(names) {
   for (const seg of segs) {
     const grid = seg.grid || (seg.rows || []).map((r) => r.slice(1, 9).padEnd(GRID_COLS, ' '));
     const isPath = grid.some((row) => /[Pp]/.test(row));
-    if (!isPath) for (const g of seg.gaps) gaps.push({ at: g.at + offset, len: g.len });
+    let rampRows = null;
+    if (!isPath) {
+      const { chasms, rampRows: rr } = classifyGaps(seg.gaps);
+      rampRows = rr;
+      for (const g of chasms) gaps.push({ at: g.at + offset, len: g.len });   // real gap to clear
+    }
     for (const o of seg.objects) entities.push({ type: o.type, s: o.s + offset, x: o.x, ...(o.fence ? { fence: true } : {}) });
-    for (const row of grid) {
-      let cell = row.padEnd(GRID_COLS, ' ').slice(0, GRID_COLS);
+    for (let r = 0; r < grid.length; r++) {
+      let cell = grid[r].padEnd(GRID_COLS, ' ').slice(0, GRID_COLS);
       if (/^@+$/.test(cell)) cell = '.'.repeat(GRID_COLS);
       if (isPath) cell = cell.replace(/ /g, '.');
+      else if (rampRows && rampRows.has(r)) cell = '.'.repeat(GRID_COLS);   // seam → rollover ramp
       cells.push(cell);
     }
     offset += seg.length;

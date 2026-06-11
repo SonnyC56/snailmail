@@ -14,7 +14,7 @@ export class TutorialGuide {
     this.el = document.createElement('div');
     this.el.className = 'tutorial-caption';
     this.el.style.cssText = [
-      'position:absolute', 'left:50%', 'bottom:11%', 'transform:translateX(-50%)',
+      'position:absolute', 'left:50%', 'top:16%', 'transform:translateX(-50%)',
       'max-width:min(82vw,640px)', 'padding:12px 22px', 'border-radius:16px',
       'background:linear-gradient(180deg,rgba(20,10,40,0.86),rgba(40,20,70,0.86))',
       'border:3px solid #ffd24d', 'color:#fff', 'font-weight:bold',

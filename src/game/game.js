@@ -187,6 +187,7 @@ export class Game {
   }
 
   _teardownLevel() {
+    if (this._outroTimer) { clearTimeout(this._outroTimer); this._outroTimer = null; }
     if (this.level) { this.level.dispose(); this.level = null; }
     if (this.hud) { this.hud.destroy(); this.hud = null; }
     if (this.tutorialGuide) { this.tutorialGuide.destroy(); this.tutorialGuide = null; }
@@ -307,6 +308,10 @@ export class Game {
       ctx.newBest = this.ctx.save.recordArcade(summary.total);
     }
 
+    // Victory outro: swing the camera around to Turbo's face, then fling the
+    // packages he collected from his body into the on-screen parcel counter.
+    this._playWinOutro(summary);
+
     // delay so the win fanfare + finish animation read before the panel
     setTimeout(() => {
       this.state = State.RESULTS;
@@ -318,7 +323,60 @@ export class Game {
       } else {
         this.screens.showResults(summary, ctx);
       }
-    }, 1800);
+    }, 3200);
+  }
+
+  /** Cinematic level-end beat: orbit the camera to Turbo's face, then spawn a
+   *  burst of package sprites at his (screen-projected) body that fly into the
+   *  HUD parcel counter, bumping the visible count as each arrives. Robust if
+   *  there's no HUD or no packages (it simply does less). */
+  _playWinOutro(summary) {
+    const lv = this.level;
+    if (!lv) return;
+    // swing the camera around to show his face and hold there
+    lv.cam?.startOutro?.(1.4);
+
+    const hud = this.hud;
+    if (!hud) return;
+    const total = lv.totalPackages ?? summary?.totalPackages ?? 0;
+    const collected = Math.max(0, Math.min(summary?.packages ?? lv.packages ?? 0, total || Infinity));
+    if (!collected) return;
+
+    // Freeze the counter at 0 collected, then let the fly-in drive it up so the
+    // count visibly ticks as each parcel lands.
+    let shown = 0;
+    hud.setPackageCount(0, total);
+
+    // cap the number of visible sprites so a 25-parcel level isn't a swarm;
+    // the count still climbs all the way to `collected`.
+    const sprites = Math.min(collected, 14);
+
+    // Wait for the camera to reach his face before the packages leap off him.
+    const launch = () => {
+      const cam = this.ctx.camera;
+      const W = window.innerWidth, H = window.innerHeight;
+      const body = lv.player?.group?.position;
+      // project Turbo's body to screen space; fall back to lower-centre.
+      let ox = W * 0.5, oy = H * 0.62;
+      if (body && cam) {
+        const p = body.clone().project(cam);
+        ox = (p.x * 0.5 + 0.5) * W;
+        oy = (-p.y * 0.5 + 0.5) * H;
+        if (!isFinite(ox) || !isFinite(oy) || p.z > 1) { ox = W * 0.5; oy = H * 0.62; }
+      }
+      for (let i = 0; i < sprites; i++) {
+        // each sprite carries an even share of the total count to the counter
+        const hi = Math.round(((i + 1) / sprites) * collected);
+        const from = { x: ox + (Math.random() - 0.5) * 70, y: oy + (Math.random() - 0.5) * 50 };
+        hud.flyInPackage(from, {
+          delay: i * 70,
+          dur: 560,
+          onArrive: () => { shown = Math.max(shown, hi); hud.setPackageCount(shown, total); },
+        });
+      }
+    };
+    // give the orbit time to find his face first
+    this._outroTimer = setTimeout(launch, 1400);
   }
 
   handleLost(info) {

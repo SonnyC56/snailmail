@@ -130,6 +130,30 @@ html, body {
 }
 .hud-parcel-icon.has-sprite { display: inline-block; }
 
+/* Victory outro: collected packages fly from Turbo's body (screen-projected)
+   into the parcel counter. Each is a small fixed sprite tweened by JS. */
+.hud-fly-pkg {
+  position: fixed;
+  left: 0; top: 0;
+  width: 30px; height: 30px;
+  margin: -15px 0 0 -15px;            /* center on the (x,y) we position to */
+  background-size: contain; background-repeat: no-repeat; background-position: center;
+  filter: drop-shadow(0 3px 5px rgba(0,0,0,0.55));
+  pointer-events: none;
+  z-index: 30;                        /* above the HUD chrome */
+  will-change: transform, opacity;
+}
+.hud-fly-pkg.fallback {
+  /* simple brown parcel if the sprite is missing */
+  background: linear-gradient(155deg, #d8a45a, #a06a28);
+  border: 2px solid #6e4514;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 2px rgba(255,255,255,0.15);
+}
+/* little pop when a parcel lands on the counter */
+@keyframes hud-pkg-bump { 0% { transform: scale(1); } 40% { transform: scale(1.35); } 100% { transform: scale(1); } }
+.hud-letters.bump { animation: hud-pkg-bump 0.3s ease; }
+
 /* lives: original LIFE snail-shell icon (32x32). Falls back to emoji span. */
 .hud-lives .life-icon {
   display: inline-block;

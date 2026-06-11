@@ -78,6 +78,7 @@ export class HUD {
     this.el = {
       pkg: root.querySelector('#hud-pkg'),
       pkgTotal: root.querySelector('#hud-pkg-total'),
+      letters: root.querySelector('.hud-letters'),
       parcelIcon: root.querySelector('#hud-parcel-icon'),
       meter: root.querySelector('#hud-meter-fill'),
       gauge: root.querySelector('#hud-gauge'),
@@ -106,6 +107,9 @@ export class HUD {
     this._lastLives = -1;
     this._lastWeapon = '';
     this._lifeUrl = null;   // resolved snail-shell life icon (PNG data URL)
+    this._parcelUrl = null; // resolved parcel sprite, reused by the fly-in
+    this._flyEls = [];      // in-flight package elements (for cleanup)
+    this._pkgLocked = false; // when set, the victory fly-in owns the parcel count
     this.onPause = null;    // host (Game) sets this to open the pause menu
     if (this.el.pauseBtn) {
       this.el.pauseBtn.addEventListener('click', (e) => { e.preventDefault(); this.onPause?.(); });
@@ -151,6 +155,7 @@ export class HUD {
 
     // Parcel counter icon (top-left).
     getSpriteURL('SPRITES/PARCELICON').then((url) => {
+      this._parcelUrl = url || null;
       if (url) {
         this.el.parcelIcon.style.backgroundImage = `url(${url})`;
         this.el.parcelIcon.classList.add('has-sprite');
@@ -167,11 +172,15 @@ export class HUD {
   hide() { this.root.classList.add('hidden'); }
 
   update(s) {
-    this.el.pkg.textContent = s.packages;
-    this.el.pkgTotal.textContent = s.totalPackages;
-    // Quota: tint the parcel count red until the minimum delivery is met.
-    if (s.quota > 0) this.el.pkg.style.color = s.packages >= s.quota ? '#9fe09f' : '#ff7777';
-    else this.el.pkg.style.color = '';
+    // During the victory fly-in the count is driven by the animation, so don't
+    // let the live sim value clobber it here.
+    if (!this._pkgLocked) {
+      this.el.pkg.textContent = s.packages;
+      this.el.pkgTotal.textContent = s.totalPackages;
+      // Quota: tint the parcel count red until the minimum delivery is met.
+      if (s.quota > 0) this.el.pkg.style.color = s.packages >= s.quota ? '#9fe09f' : '#ff7777';
+      else this.el.pkg.style.color = '';
+    }
     this.el.score.textContent = s.score.toLocaleString('en-US');
     this.el.timer.textContent = s.timeText;
 
@@ -233,6 +242,68 @@ export class HUD {
     if (s.midLabel) this.el.midLabel.textContent = s.midLabel;
   }
 
+  /** Screen-space center (CSS pixels, viewport coords) of the parcel counter,
+   *  the target the victory fly-in packages home in on. */
+  packageCounterScreenPos() {
+    const el = this.el.letters || this.el.parcelIcon;
+    if (!el) return { x: 60, y: 60 };
+    const r = el.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  }
+
+  /** Set the package count instantly and hand control of the visible number to
+   *  the caller (the victory fly-in) so the live sim won't overwrite it. */
+  setPackageCount(got, total) {
+    this._pkgLocked = true;
+    if (got != null) this.el.pkg.textContent = got;
+    if (total != null) this.el.pkgTotal.textContent = total;
+    this.el.pkg.style.color = '';
+  }
+
+  /** Animate one collected package flying from a screen point (CSS px) into the
+   *  parcel counter. On arrival, optionally bump the visible count with a pop.
+   *  `delay` (ms) staggers a burst of them. Degrades to a CSS parcel if the
+   *  sprite is missing. Returns the element so callers can track it. */
+  flyInPackage(from, { delay = 0, dur = 620, onArrive = null } = {}) {
+    const elFly = document.createElement('div');
+    elFly.className = 'hud-fly-pkg' + (this._parcelUrl ? '' : ' fallback');
+    if (this._parcelUrl) elFly.style.backgroundImage = `url(${this._parcelUrl})`;
+    this.root.appendChild(elFly);
+    this._flyEls.push(elFly);
+
+    const sx = from.x, sy = from.y;
+    const start = performance.now() + delay;
+    // a little lateral curve so the packages arc rather than slide straight
+    const bend = (Math.random() - 0.5) * 160;
+
+    const step = (now) => {
+      if (!elFly.isConnected) return; // destroyed mid-flight
+      const t = (now - start) / dur;
+      if (t < 0) { requestAnimationFrame(step); return; }
+      const to = this.packageCounterScreenPos(); // re-read so it tracks on resize
+      if (t >= 1) {
+        elFly.style.transform = `translate(${to.x}px, ${to.y}px) scale(0.5)`;
+        elFly.style.opacity = '0';
+        const i = this._flyEls.indexOf(elFly); if (i >= 0) this._flyEls.splice(i, 1);
+        setTimeout(() => elFly.remove(), 60);
+        if (onArrive) onArrive();
+        // pop the counter as the parcel lands
+        const L = this.el.letters;
+        if (L) { L.classList.remove('bump'); void L.offsetWidth; L.classList.add('bump'); }
+        return;
+      }
+      const e = 1 - Math.pow(1 - t, 3);           // easeOutCubic
+      const x = sx + (to.x - sx) * e + bend * Math.sin(Math.PI * t);
+      const y = sy + (to.y - sy) * e - 60 * Math.sin(Math.PI * t); // hop up then down
+      const sc = 1 - 0.4 * e;
+      elFly.style.transform = `translate(${x}px, ${y}px) scale(${sc})`;
+      elFly.style.opacity = String(0.35 + 0.65 * Math.min(1, t * 4));
+      requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+    return elFly;
+  }
+
   /** Live multiplayer standings (array of {name, progress, place, you}). */
   setMultiplayer(rows) {
     if (!rows || !rows.length) { this.el.mp.innerHTML = ''; return; }
@@ -256,7 +327,12 @@ export class HUD {
     if (n === 0) setTimeout(() => el.classList.add('hidden'), 700);
   }
 
-  destroy() { this.root.innerHTML = ''; this.root.classList.add('hidden'); }
+  destroy() {
+    for (const el of this._flyEls) el.remove();
+    this._flyEls.length = 0;
+    this.root.innerHTML = '';
+    this.root.classList.add('hidden');
+  }
 }
 
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }

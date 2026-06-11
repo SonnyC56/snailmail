@@ -475,7 +475,14 @@ export class EntityManager {
   update(dt, t, player) {
     const ps = player.s;
     for (const e of this.entities) {
-      if (!e.alive) continue;
+      // dying slug: hold the red flash for a beat, then actually despawn
+      if (!e.alive) {
+        if (e.dying > 0) {
+          e.dying -= dt;
+          if (e.dying <= 0) { e.dying = 0; e.mesh.visible = false; }
+        }
+        continue;
+      }
       if (e.s < ps - 30 || e.s > ps + 180) continue;
       e.cooldown = Math.max(0, e.cooldown - dt);
 
@@ -565,7 +572,19 @@ export class EntityManager {
   damageEntity(e, amount) {
     if (!e.alive || !e.shootable) return false;
     e.hp -= amount;
-    if (e.hp <= 0) { e.alive = false; e.mesh.visible = false; return true; }
+    if (e.hp <= 0) {
+      e.alive = false;
+      // Slugs don't pop instantly: flash the sprite bright red for a beat, then
+      // despawn (handled in update()). Other enemies vanish as before.
+      if (e.type === 'slug' && e.isSprite && e.mesh.material && e.mesh.material.color) {
+        e.dying = 0.18;            // seconds of red-flash before it disappears
+        e.hitFlash = 0;            // cancel any in-progress non-death tint
+        e.mesh.material.color.setHex(0xff2a2a);
+      } else {
+        e.mesh.visible = false;
+      }
+      return true;
+    }
     return false;
   }
 

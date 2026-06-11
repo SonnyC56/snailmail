@@ -325,7 +325,67 @@ export class Track {
     // levels use the continuous ribbon.
     group.add(this.cells ? this._buildGridRoad(theme) : this._buildRibbon(theme));
     group.add(this._buildEdges(theme));
+    const warnings = this._buildGapWarnings(theme);
+    if (warnings) group.add(warnings);
     return group;
+  }
+
+  /**
+   * Red/yellow striped WARNING decals painted flat on the drivable road in the
+   * last stretch leading up to each gap, so a hole reads from a distance. One
+   * thin quad strip per gap, swept along the track frames (so it follows
+   * curves/banks) and clamped to the drivable lateral extent at each ring. The
+   * TRACKWARN texture tiles along the length (its stripes run across the road).
+   */
+  _buildGapWarnings(theme) {
+    if (!this.gaps.length) return null;
+    const LEAD = 7;     // length of the warning patch before the gap (world units)
+    const STEP = 1.0;   // ring spacing along s
+    const LIFT = 0.04;  // tiny hover above the road to avoid z-fighting
+    const positions = [], normals = [], uvs = [], indices = [];
+    let v = 0;
+    for (const g of this.gaps) {
+      const s0 = Math.max(0, g.start - LEAD);
+      const s1 = g.start;
+      if (s1 - s0 < 0.5) continue;
+      const nRings = Math.max(2, Math.ceil((s1 - s0) / STEP) + 1);
+      let prevHad = false, prevBase = 0;
+      for (let i = 0; i < nRings; i++) {
+        const s = lerp(s0, s1, i / (nRings - 1));
+        const ext = this.drivableExtent(s);
+        if (!ext) { prevHad = false; continue; } // no road this ring (shouldn't happen pre-gap)
+        const fr = this.frameAt(s);
+        // a touch inside the drivable edges so the stripe sits ON the road
+        const xL = ext.min + 0.3, xR = ext.max - 0.3;
+        if (xR - xL < 0.5) { prevHad = false; continue; }
+        const pL = fr.pos.clone().addScaledVector(fr.side, xL).addScaledVector(fr.up, LIFT);
+        const pR = fr.pos.clone().addScaledVector(fr.side, xR).addScaledVector(fr.up, LIFT);
+        const base = v;
+        positions.push(pL.x, pL.y, pL.z, pR.x, pR.y, pR.z);
+        normals.push(fr.up.x, fr.up.y, fr.up.z, fr.up.x, fr.up.y, fr.up.z);
+        // u spans road width once; v tiles the stripes along s (stripes run across)
+        const vCoord = (s - s0) * 0.5;
+        uvs.push(0, vCoord, 1, vCoord);
+        if (prevHad) {
+          indices.push(prevBase, base, prevBase + 1, prevBase + 1, base, base + 1);
+        }
+        prevHad = true; prevBase = base;
+        v += 2;
+      }
+    }
+    if (!positions.length) return null;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    geo.setIndex(indices);
+    const tex = assets.texture('OBJECTS/WORLD00/TRACKWARN', { wrap: true });
+    const mat = new THREE.MeshLambertMaterial({
+      map: tex, side: THREE.DoubleSide,
+      emissive: new THREE.Color(0xffffff), emissiveIntensity: 0.35,
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+    });
+    return new THREE.Mesh(geo, mat);
   }
 
   /** Road built quad-per-drivable-cell from the real segment grid. */

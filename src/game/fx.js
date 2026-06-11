@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import { assets } from '../assets.js';
 
 const MAX_PARTICLES = 600;
+const MAX_DIRT = 300;
 const MAX_FLASHES = 32;
 
 export class ParticleFX {
@@ -41,6 +42,33 @@ export class ParticleFX {
       this.parts.push({ alive: false, pos: new THREE.Vector3(), vel: new THREE.Vector3(), life: 0, maxLife: 1, col: new THREE.Color() });
     }
     this._cursor = 0;
+
+    // Separate NON-additive ("dirt") cloud: opaque-ish brown clods that arc and
+    // fall under gravity. Additive blending washes dark colours toward white, so
+    // a dirt/debris burst needs its own normal-blended layer to read as soil.
+    this.dirtGeo = new THREE.BufferGeometry();
+    this.dirtPos = new Float32Array(MAX_DIRT * 3);
+    this.dirtCol = new Float32Array(MAX_DIRT * 3);
+    this.dirtGeo.setAttribute('position', new THREE.BufferAttribute(this.dirtPos, 3));
+    this.dirtGeo.setAttribute('color', new THREE.BufferAttribute(this.dirtCol, 3));
+    this.dirtPoints = new THREE.Points(this.dirtGeo, new THREE.PointsMaterial({
+      size: 0.7,
+      map: assets.texture('SPRITES/SPARK'),
+      vertexColors: true,
+      transparent: true,
+      opacity: 1,
+      alphaTest: 0.18,
+      depthWrite: false,
+      blending: THREE.NormalBlending,
+      sizeAttenuation: true,
+    }));
+    this.dirtPoints.frustumCulled = false;
+    scene.add(this.dirtPoints);
+    this.dirt = [];
+    for (let i = 0; i < MAX_DIRT; i++) {
+      this.dirt.push({ alive: false, pos: new THREE.Vector3(), vel: new THREE.Vector3(), life: 0, maxLife: 1, col: new THREE.Color(), gravity: 18 });
+    }
+    this._dcursor = 0;
 
     // expanding billboard flashes (original burst sheets)
     this.flashGroup = new THREE.Group();
@@ -81,6 +109,34 @@ export class ParticleFX {
       p.maxLife = p.life;
       p.col.copy(col);
       if (Math.random() < 0.3) p.col.lerp(new THREE.Color(0xffffff), 0.6);
+    }
+  }
+
+  /**
+   * Dirt/debris burst: brown clods that pop outward and fall under gravity.
+   * Uses the non-additive layer so the soil colours stay dark and earthy.
+   * @param pos    world position
+   * @param n      count
+   * @param opts   { speed, gravity, life, spread }
+   */
+  dirtBurst(pos, n = 22, opts = {}) {
+    const speed = opts.speed ?? 7;
+    const gravity = opts.gravity ?? 20;
+    const life = opts.life ?? 0.7;
+    // a small palette of earthy browns so the clods don't read as one flat blob
+    const tones = [0x6b4a2a, 0x7a5836, 0x5a3a1f, 0x8a6a3a, 0x4a3018];
+    for (let i = 0; i < n; i++) {
+      const p = this.dirt[this._dcursor];
+      this._dcursor = (this._dcursor + 1) % MAX_DIRT;
+      p.alive = true;
+      p.pos.copy(pos);
+      // bias upward so the dirt sprays up and out, then rains down
+      p.vel.set(Math.random() - 0.5, Math.random() * 0.9 + 0.4, Math.random() - 0.5)
+        .normalize().multiplyScalar(speed * (0.4 + Math.random() * 0.9));
+      p.gravity = gravity;
+      p.life = life * (0.6 + Math.random() * 0.7);
+      p.maxLife = p.life;
+      p.col.setHex(tones[(Math.random() * tones.length) | 0]);
     }
   }
 
@@ -135,6 +191,35 @@ export class ParticleFX {
     this.geo.attributes.position.needsUpdate = true;
     this.geo.attributes.color.needsUpdate = true;
 
+    // dirt clods: same integrate-and-fade, but heavier gravity and held colour
+    let d3 = 0;
+    for (let i = 0; i < MAX_DIRT; i++) {
+      const p = this.dirt[i];
+      if (p.alive) {
+        p.life -= dt;
+        if (p.life <= 0) p.alive = false;
+        else {
+          p.vel.y -= p.gravity * dt;
+          p.pos.addScaledVector(p.vel, dt);
+        }
+      }
+      if (p.alive) {
+        this.dirtPos[d3] = p.pos.x;
+        this.dirtPos[d3 + 1] = p.pos.y;
+        this.dirtPos[d3 + 2] = p.pos.z;
+        // hold full colour, only darken/fade over the last third of life
+        const f = Math.min(1, (p.life / p.maxLife) * 2.2);
+        this.dirtCol[d3] = p.col.r * f;
+        this.dirtCol[d3 + 1] = p.col.g * f;
+        this.dirtCol[d3 + 2] = p.col.b * f;
+      } else {
+        this.dirtPos[d3 + 1] = -9999;
+      }
+      d3 += 3;
+    }
+    this.dirtGeo.attributes.position.needsUpdate = true;
+    this.dirtGeo.attributes.color.needsUpdate = true;
+
     // expanding flashes: grow + fade then park
     for (const f of this.flashes) {
       if (!f.alive) continue;
@@ -149,9 +234,12 @@ export class ParticleFX {
 
   dispose(scene) {
     scene.remove(this.points);
+    scene.remove(this.dirtPoints);
     scene.remove(this.flashGroup);
     this.geo.dispose();
+    this.dirtGeo.dispose();
     this.points.material.dispose();
+    this.dirtPoints.material.dispose();
     for (const f of this.flashes) f.sp.material.dispose();
   }
 }

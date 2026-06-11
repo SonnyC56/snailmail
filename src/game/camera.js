@@ -21,6 +21,9 @@ export class ChaseCamera {
     this._introT = 0;
     this._introDur = 0;
     this._introHold = 0;
+    this._outroT = 0;
+    this._outroSwing = 0;
+    this._outroActive = false;
   }
 
   addShake(amount) { this.shake = Math.min(1.2, this.shake + amount); }
@@ -30,6 +33,13 @@ export class ChaseCamera {
    *  position over `orbit` seconds. */
   startIntro(hold = 1.1, orbit = 1.9) { this._introHold = hold; this._introDur = hold + orbit; this._introT = 0; }
   get introActive() { return this._introT < this._introDur; }
+
+  /** Begin the level-end victory fly-around: swing the camera AROUND from
+   *  behind Turbo to the FRONT (so we see his face) over `swing` seconds, then
+   *  hold on the face. Mirror of the intro orbit, run in reverse and parked at
+   *  the front. */
+  startOutro(swing = 1.4) { this._outroSwing = Math.max(swing, 0.001); this._outroT = 0; this._outroActive = true; }
+  get outroActive() { return !!this._outroActive; }
 
   update(dt, player) {
     const track = this.track;
@@ -111,11 +121,33 @@ export class ChaseCamera {
       this._up.copy(playerNormal);
     }
 
+    // Level-end victory fly-around: swing the camera AROUND from behind Turbo
+    // to the FRONT so we see his face, then hold there. Same orbit math as the
+    // intro but driven from behind (a = π) toward the front (a = 0).
+    if (this._outroActive) {
+      this._outroT += dt;
+      const p = Math.min(this._outroT / this._outroSwing, 1);
+      const e = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2; // easeInOut
+      const a = (1 - e) * Math.PI;                 // π = behind → 0 = front (face)
+      const frP = track.frameAt(player.s);
+      const pp = player.group.position;
+      const orbit = pp.clone()
+        .addScaledVector(frP.tangent, Math.cos(a) * behind)
+        .addScaledVector(frP.side, Math.sin(a) * behind * 0.55)
+        .addScaledVector(playerNormal, lerp(height, 1.7, e));
+      const orbitLook = pp.clone()
+        .addScaledVector(playerNormal, lerp(0.5, 1.1, e))
+        .addScaledVector(frP.tangent, lerp(6, -0.5, e));
+      this._pos.copy(orbit);
+      this._look.copy(orbitLook);
+      this._up.copy(playerNormal);
+    }
+
     this.camera.position.copy(this._pos).add(shakeOff);
     this.camera.up.copy(this._up);
     this.camera.lookAt(this._look);
     this.camera.updateProjectionMatrix();
   }
 
-  reset() { this._initialized = false; this.shake = 0; }
+  reset() { this._initialized = false; this.shake = 0; this._outroActive = false; this._outroT = 0; }
 }

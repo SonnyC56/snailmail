@@ -149,7 +149,7 @@ export class Level {
       switch (e.type) {
         case 'slug':
           if (P.invincible) {
-            if (this.entities.damageEntity(e, 99)) { this.score += KILL_PTS.slug; this.kills++; this.fx.burst(pos, 0x9a4ecf, 16, { speed: 7 }); a.hit(); }
+            if (this.entities.damageEntity(e, 99)) { this.score += KILL_PTS.slug; this.kills++; this.fx.dirtBurst(pos, 22, { speed: 7 }); a.hit(); }
           } else if (P.knockOff()) {
             a.fall(); this.fx.burst(P.group.position, 0x9a4ecf, 18, { speed: 7 }); this._loseLife('slug');
           }
@@ -186,10 +186,10 @@ export class Level {
         this.score += KILL_PTS[e.type] ?? 100;
         this.kills++;
         if (e.type === 'slug') {
-          // slug destroyed: purple goo burst + squish sound + a taunt
-          this.fx.burst(e.mesh.position, 0x9a4ecf, 22, { speed: 8 });
-          this.fx.burst(e.mesh.position, 0x6a2a9a, 14, { speed: 4, life: 0.5 });
-          this.fx.flash(e.mesh.position, 'PARTICLEEXPLODE-SMALL', { color: 0xb86aff, size: 1.8, size1: 4.5, life: 0.4 });
+          // slug destroyed: sprite flashes red (entities.damageEntity) then a
+          // dirt-like clod explosion kicks up from the ground + squish + taunt
+          this.fx.dirtBurst(e.mesh.position, 26, { speed: 8 });
+          this.fx.flash(e.mesh.position, 'PARTICLEEXPLODE-SMALL', { color: 0x7a5836, size: 1.8, size1: 4.5, life: 0.4 });
           a.hit(); a.voiceSet('enemies', { gap: 7 });
           a.slugVoice(['SLUG-DEATH1', 'SLUG-DEATH2', 'SLUG-DESTROY', 'SLUG-GOTHIM']);   // the slug's last words
         } else {
