@@ -148,6 +148,9 @@ export class HUD {
   update(s) {
     this.el.pkg.textContent = s.packages;
     this.el.pkgTotal.textContent = s.totalPackages;
+    // Quota: tint the parcel count red until the minimum delivery is met.
+    if (s.quota > 0) this.el.pkg.style.color = s.packages >= s.quota ? '#9fe09f' : '#ff7777';
+    else this.el.pkg.style.color = '';
     this.el.score.textContent = s.score.toLocaleString('en-US');
     this.el.timer.textContent = s.timeText;
 

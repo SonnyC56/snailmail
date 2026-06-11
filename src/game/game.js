@@ -172,13 +172,14 @@ export class Game {
       case 'go': this.hud?.flash('GO!', '#ffd24d'); break; // start quip already played during the level-start intro
       case 'package':
         if (p.got === p.total) { this.hud?.flash('All Parcels!', '#9fe09f'); a.perfect(); }
+        else a.voiceSet('package', { gap: 7 });   // occasional "special delivery!" quip
         break;
       case 'weapon': this.hud?.flash(p.name + '!', '#ffffff'); a.weaponUp(p.level); a.voiceSet('powerup'); if (p.level >= 7) a.invincible(); break;
       case 'heal': a.heart(); break;
       case 'jetpack': this.hud?.flash('Jetpack!', '#66ccff'); a.jetpack(); break;
       case 'smartbomb': this.hud?.flash('BOOM!', '#ffd24d'); break;
-      case 'slowed': this.hud?.flash('Slowed!', '#e04040'); a.slowRing(); break;
-      case 'damage': a.voiceSet('damage'); break;
+      case 'slowed': this.hud?.flash('Slowed!', '#e04040'); a.slowRing(); a.voiceSet('slow', { gap: 6 }); break;
+      case 'damage': a.voiceSet(Math.random() < 0.5 ? 'ouch' : 'damage'); break;
       case 'postal': this.hud?.flash('GOING POSTAL!', '#ff3a3a'); break;
       case 'life':
         if (p.cause === 'slug') a.voiceSet('slugged', { force: true });
@@ -226,6 +227,7 @@ export class Game {
     return {
       packages: lv.packages,
       totalPackages: lv.totalPackages,
+      quota: (lv.mode === 'timetrial' || lv.mode === 'multiplayer') ? 0 : (lv.level.quota ?? 0),
       score: lv.score,
       meter: lv.player.meterRatio,
       weapon: lv.player.weapon.name,
@@ -254,6 +256,7 @@ export class Game {
     if (this._wonHandled) return;
     this._wonHandled = true;
     summary.outcome = 'won';
+    this.ctx.audio.voiceSet('victory', { force: true });   // "How's that for express service!"
 
     // online race: report our time; the server drives the results screen
     if (this.mode === 'multiplayer') {
@@ -296,6 +299,11 @@ export class Game {
     this._lostHandled = true;
     const summary = this.level.buildSummary();
     summary.outcome = 'lost';
+    if (info?.cause === 'quota') {
+      summary.failReason = `Quota not met — delivered ${info.delivered} of ${info.quota}`;
+      this.hud?.flash('Not enough mail delivered!', '#ff7777');
+    }
+    this.ctx.audio.voiceSet('dying', { force: true });   // "I need a new job..."
     setTimeout(() => {
       this.state = State.RESULTS;
       this.screens.showResults(summary, { newBest: false, hasNext: false });

@@ -97,7 +97,7 @@ export class Level {
 
     P.onFire = (w, origin, s, x) => { this.weapons.fire(w, s, x); a.fire?.(w.kind); };
     P.onLand = () => a.land();
-    P.onJumpPod = () => a.jump();
+    P.onJumpPod = () => { a.jump(); a.voiceSet('supertramp', { gap: 5 }); };
     P.onFallStart = () => { a.fall(); this._loseLife('fall'); };
     // going postal: a fast invincible frenzy (player.goPostal already fired) —
     // NOT a life loss. Flash + rage voice + the postal loop sting.
@@ -180,10 +180,10 @@ export class Level {
         this.score += KILL_PTS[e.type] ?? 100;
         this.kills++;
         if (e.type === 'slug') {
-          // slug destroyed: purple goo burst + squish sound
+          // slug destroyed: purple goo burst + squish sound + a taunt
           this.fx.burst(e.mesh.position, 0x9a4ecf, 22, { speed: 8 });
           this.fx.burst(e.mesh.position, 0x6a2a9a, 14, { speed: 4, life: 0.5 });
-          a.hit();
+          a.hit(); a.voiceSet('enemies', { gap: 7 });
         } else {
           const col = e.type === 'turret' ? 0xff8866 : 0x8a7a6a;
           this.fx.burst(e.mesh.position, col, e.type === 'turret' ? 22 : 14, { speed: 7 });
@@ -295,6 +295,18 @@ export class Level {
 
   _win() {
     if (this.finished) return;
+    // Quota: the original requires delivering at least `Quota` parcels to pass.
+    // Time-trial (time is the goal) and multiplayer races are exempt. Clamp to
+    // the parcels actually spawned so a level can never be unwinnable.
+    const quota = Math.min(this.level.quota ?? 0, this.totalPackages);
+    if (quota > 0 && this.packages < quota && this.mode !== 'timetrial' && this.mode !== 'multiplayer') {
+      this.finished = true;
+      this.status = RunStatus.LOST;
+      this.player.finish();
+      this.ctx.audio.gameOver();
+      this._emit('lost', { cause: 'quota', quota, delivered: this.packages });
+      return;
+    }
     this.finished = true;
     this.status = RunStatus.WON;
     this.player.finish();
@@ -372,6 +384,10 @@ export class Level {
     this.weapons.update(dt, this.entities, this.player);
     this._updateEnemyShots(dt);
     this.cam.update(dt, this.player);
+
+    // ambient Turbo chatter — the original _VOICE.TXT "Frequency:20"
+    this._ambientT = (this._ambientT ?? 14) - dt;
+    if (this._ambientT <= 0) { this._ambientT = 16 + Math.random() * 10; this.ctx.audio.voiceSet('misc', { gap: 5 }); }
 
     if (this.mode === 'arcade') {
       this.player.baseSpeed = Math.min(this.player.maxSpeed, this.player.baseSpeed + dt * 0.35);
