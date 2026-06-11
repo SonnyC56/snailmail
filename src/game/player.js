@@ -204,6 +204,7 @@ export class Player {
     this._cannonRecoil = 1;
     this._flashTimer = 0.06;
     this.snail.parts.flash.visible = true;
+    this.snail.fireWeapon?.();   // brief original FIRE recoil pose on the gun
   }
 
   _updateRiding(dt, input) {

@@ -299,6 +299,7 @@ export function buildSnail(colors = SNAIL_COLORS) {
     // clear previous
     for (const m of state.weaponMeshes) weaponMount.remove(m);
     state.weaponMeshes.length = 0;
+    state.weaponInfo = [];
     if (!spec) { procWeapon.visible = true; return; }
     let mounted = false;
     for (const name of spec.meshes) {
@@ -320,11 +321,28 @@ export function buildSnail(colors = SNAIL_COLORS) {
         mesh.position.set(0, -0.65, -0.3); // sit on the shell (origins ~aligned)
         weaponMount.add(mesh);
         state.weaponMeshes.push(mesh);
+        // record the DRAW/FIRE families so the gun can unfold on upgrade + recoil
+        const info = { mesh, base: geo, drawGeos: [], fireGeo: null };
+        state.weaponInfo.push(info);
+        loadWeaponFrames(name, info);
         mounted = true;
       } catch (err) { /* skip a weapon mesh that fails */ }
     }
     // if nothing mounted, fall back to the procedural barrel
     procWeapon.visible = !mounted;
+    // play the deploy animation (gun unfolds from the shell)
+    state.deploying = mounted; state.deployStart = null;
+  }
+
+  /** Stream the DRAW deploy frames (and FIRE recoil frame) for a weapon mesh,
+   *  derived from its BASE name (e.g. BLASTERTOP-BASE-000 -> -DRAW-000..). */
+  async function loadWeaponFrames(baseName, info) {
+    const prefix = baseName.replace(/-BASE-\d+$/, '');
+    for (let i = 0; i < 6; i++) {
+      try { info.drawGeos.push(await xloader.geometry('X', `${prefix}-DRAW-${String(i).padStart(3, '0')}`)); }
+      catch { break; }   // ran out of DRAW frames for this weapon
+    }
+    try { info.fireGeo = await xloader.geometry('X', `${prefix}-FIRE-000`); } catch { /* no recoil frame */ }
   }
 
   /** Stream + mount the original jetpack (pack on the back + a 3-frame looping
@@ -379,6 +397,8 @@ export function buildSnail(colors = SNAIL_COLORS) {
     },
     /** Mount the original weapon mesh for the given WEAPONS index. */
     setWeaponLevel(level) { mountWeapon(level); },
+    /** Flash the FIRE recoil pose for a tick (meshes that have a FIRE frame). */
+    fireWeapon() { if (!state.deploying && state.weaponInfo && state.weaponInfo.some((w) => w.fireGeo)) state._fireReq = true; },
     /** Swap Turbo's body skin: 'base' | 'damage' | 'invincible' (original TGAs). */
     setSkin(which) {
       if (!state.material) return;
@@ -419,6 +439,21 @@ export function buildSnail(colors = SNAIL_COLORS) {
         if (state.thrustMesh && state.thrustMesh.visible && state.thrustGeos.length) {
           const ti = Math.floor(t * 12) % state.thrustGeos.length;
           if (state.thrustMesh.geometry !== state.thrustGeos[ti]) state.thrustMesh.geometry = state.thrustGeos[ti];
+        }
+        // weapon deploy (gun unfolds on upgrade) + fire recoil pose
+        if (state.weaponInfo && state.weaponInfo.length) {
+          if (state.deploying) {
+            if (state._weapStart == null) state._weapStart = t;
+            const e = (t - state._weapStart) / 0.32;
+            if (e >= 1) { state.deploying = false; state._weapStart = null; for (const w of state.weaponInfo) if (w.mesh.geometry !== w.base) w.mesh.geometry = w.base; }
+            else for (const w of state.weaponInfo) { if (w.drawGeos.length) { const k = Math.min(w.drawGeos.length - 1, Math.floor(e * w.drawGeos.length)); if (w.mesh.geometry !== w.drawGeos[k]) w.mesh.geometry = w.drawGeos[k]; } }
+          } else {
+            if (state._fireReq && state._fireEndT == null) { state._fireEndT = t + 0.07; state._fireReq = false; }
+            if (state._fireEndT != null) {
+              if (t >= state._fireEndT) { state._fireEndT = null; for (const w of state.weaponInfo) if (w.mesh.geometry !== w.base) w.mesh.geometry = w.base; }
+              else for (const w of state.weaponInfo) if (w.fireGeo && w.mesh.geometry !== w.fireGeo) w.mesh.geometry = w.fireGeo;
+            }
+          }
         }
         // subtle whole-body bob so motion reads even on a 2-frame swap
         const wiggle = Math.sin(t * 10) * 0.03 * (0.4 + speedNorm);
