@@ -221,6 +221,7 @@ export function entitiesForLevel(level, track, mode = 'story') {
   // Pickups that land in a hole are nudged to the nearest surface so they're
   // collectable; floating enemies over a gap (Huge Gap etc.) stay put.
   const NUDGE_TO_SURFACE = new Set(['package', 'heart', 'ringWhite', 'ringYellow']);
+  const gridPackages = [];   // collected, then thinned to the level's Parcels count
   for (const o of layout.entities) {
     if (o.s < 6 || o.s > L - 12) continue;       // keep the entry/finish clear
     // density-gate enemies (but the tutorial shows everything it demos)
@@ -239,7 +240,20 @@ export function entitiesForLevel(level, track, mode = 'story') {
     if (o.type === 'slug') def.patrol = 0;
     if (o.type === 'turret') def.hp = 3 + Math.floor(level.difficulty * 2);
     if (o.type === 'asteroid') def.hp = 2;
+    if (o.type === 'package') { gridPackages.push(def); continue; }   // place exactly Parcels of these
     ents.push(def);
+  }
+
+  // Place exactly the level's Parcels count: the grids often carry MANY more
+  // package cells than the level asks for (ARCADE001: 31 cells vs Parcels:15),
+  // so thin them down to an evenly-spaced subset. (Top-up below covers the
+  // rarer case where the grid has fewer.)
+  const targetParcels = level.parcels ?? 0;
+  gridPackages.sort((a, b) => a.s - b.s);
+  if (targetParcels > 0 && gridPackages.length > targetParcels) {
+    for (let i = 0; i < targetParcels; i++) ents.push(gridPackages[Math.floor(i * gridPackages.length / targetParcels)]);
+  } else {
+    for (const d of gridPackages) ents.push(d);
   }
 
   // --- guarantee every gap is passable: jump pod (or jetpack) before it ----
