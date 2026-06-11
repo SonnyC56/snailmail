@@ -81,34 +81,62 @@ export class Track {
 
   _buildPath(def) {
     const rand = rng(def.seed ?? 1);
-    const pts = [];
-    const stepLen = 34;
-    const n = Math.ceil((def.length ?? 1200) / stepLen) + 3;
-
-    let pos = new THREE.Vector3(0, 0, 0);
-    let yaw = 0;
-    let pitch = 0;
+    const length = def.length ?? 1200;
     const curv = def.curviness ?? 0.5;
     const hill = def.hilliness ?? 0.4;
+    const paths = def.paths ?? [];
 
-    pts.push(pos.clone());
-    for (let i = 0; i < n; i++) {
-      yaw += (rand() - 0.5) * curv * 1.2;
-      yaw *= 0.9;  // relax back toward forward so the road keeps progressing
-      pitch += (rand() - 0.5) * hill * 0.7;
-      pitch = clamp(pitch * 0.88, -0.5, 0.5);
-
-      const dir = new THREE.Vector3(
-        Math.sin(yaw) * Math.cos(pitch),
-        Math.sin(pitch),
-        -Math.cos(yaw) * Math.cos(pitch),
-      );
+    // 1) Coarse baseline route — the gentle procedural curve (unchanged feel).
+    const stepLen = 34;
+    const nC = Math.ceil(length / stepLen) + 3;
+    let pos = new THREE.Vector3(0, 0, 0);
+    let yaw = 0, pitch = 0;
+    const basePts = [pos.clone()];
+    for (let i = 0; i < nC; i++) {
+      yaw += (rand() - 0.5) * curv * 1.2; yaw *= 0.9;
+      pitch += (rand() - 0.5) * hill * 0.7; pitch = clamp(pitch * 0.88, -0.5, 0.5);
+      const dir = new THREE.Vector3(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch));
       pos = pos.clone().addScaledVector(dir, stepLen);
-      pts.push(pos.clone());
+      basePts.push(pos.clone());
     }
+    const baseCurve = new THREE.CatmullRomCurve3(basePts, false, 'centripetal', 0.5);
+    baseCurve.arcLengthDivisions = basePts.length * 24;
+    const baseLen = baseCurve.getLength();
 
+    // No authored 3D features → use the baseline directly (flat + procedural).
+    if (!paths.length) { this.curve = baseCurve; this.length = baseLen; return; }
+
+    // 2) Fine walk that bulges the spline into the real 3D shapes within each
+    // path range. Every step advances the same arc, so the TOTAL arc length is
+    // preserved (the grid road / entities placed at s = row*rowUnits stay
+    // aligned) — a loop just consumes its segment's arc as a vertical circle
+    // instead of a forward run.
+    const step = 3.0;
+    const nF = Math.max(2, Math.ceil(baseLen / step));
+    const pts = [];
+    const cur = baseCurve.getPointAt(0).clone();
+    pts.push(cur.clone());
+    const tmp = new THREE.Vector3();
+    for (let i = 1; i <= nF; i++) {
+      const s = i * step;
+      const u0 = Math.min(s / baseLen, 1);
+      const tan = baseCurve.getTangentAt(u0, tmp).normalize();
+      let by = Math.atan2(tan.x, -tan.z);          // baseline yaw
+      let bp = Math.asin(clamp(tan.y, -1, 1));      // baseline pitch
+      const pf = paths.find((p) => s >= p.at && s < p.at + p.len);
+      if (pf) {
+        const u = (s - pf.at) / pf.len;             // 0..1 through the feature
+        if (pf.family === 'loop') bp += 2 * Math.PI * u;                 // full vertical loop
+        else if (pf.family === 'hill') bp += 0.75 * Math.sin(2 * Math.PI * u);   // up then down
+        else if (pf.family === 'valley') bp -= 0.75 * Math.sin(2 * Math.PI * u); // down then up
+        else if (pf.family === 'slalom') by += 0.6 * Math.sin(4 * Math.PI * u);  // S-weave
+      }
+      const dir = new THREE.Vector3(Math.sin(by) * Math.cos(bp), Math.sin(bp), -Math.cos(by) * Math.cos(bp));
+      cur.addScaledVector(dir, step);
+      pts.push(cur.clone());
+    }
     this.curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal', 0.5);
-    this.curve.arcLengthDivisions = pts.length * 24;
+    this.curve.arcLengthDivisions = pts.length * 12;
     this.length = this.curve.getLength();
   }
 

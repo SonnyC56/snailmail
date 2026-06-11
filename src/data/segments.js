@@ -41,6 +41,37 @@ const GAP = new Set([' ']);                  // non-drivable void only
 const PATH = new Set(['P', 'p']);           // curved-path control (drivable footprint)
 const BOOST = new Set(['J', '(']);          // jump-pad / trampoline (drivable launch)
 
+// The original encoded a 3D track shape per path segment as `Path=<Type>` (50+
+// named curves: LoopTheLoop, HalfPipe, SCREW, Twister, Invert, Hill, Valley...).
+// The exact curves lived in the engine; we reconstruct each by FAMILY: spline
+// pitch/yaw shaping for loop/hill/valley/slalom, and tangent-roll for
+// corkscrew/invert/halfpipe (reusing Track's existing roll system).
+function pathTypeOf(seg) {
+  for (const row of (seg.rows || [])) { const m = row.match(/Path=(\S+)/i); if (m) return m[1]; }
+  return null;
+}
+function pathFamily(type) {
+  if (!type) return 'flat';
+  const t = type.toLowerCase();
+  if (/loop/.test(t)) return 'loop';
+  if (/halfpipe/.test(t)) return 'halfpipe';
+  if (/screw|twister/.test(t)) return 'corkscrew';
+  if (/invert|turnover|turnunder|cage/.test(t)) return 'invert';
+  if (/hill|hump/.test(t)) return 'hill';
+  if (/valley|dip|dump/.test(t)) return 'valley';
+  if (/slalom|snake|sweep|wibble/.test(t)) return 'slalom';
+  return 'flat';   // toad/supertramp/worm/warp/start/P0-2 → keep continuous road
+}
+/** Record a path segment as a spline feature or a roll feature. Deterministic
+ *  (sign derived from `at`) so every client rebuilds the identical track. */
+function addPathFeature(paths, rolls, fam, at, len) {
+  const sign = (Math.floor(at / 7) % 2) ? 1 : -1;
+  if (fam === 'corkscrew') rolls.push({ at, len, deg: sign * 360, cork: true });
+  else if (fam === 'invert') rolls.push({ at, len, deg: 180, cork: false });
+  else if (fam === 'halfpipe') rolls.push({ at, len, deg: sign * 52, cork: false });
+  else if (fam === 'loop' || fam === 'hill' || fam === 'valley' || fam === 'slalom') paths.push({ at, len, family: fam });
+}
+
 // grid char -> entity type (null = not a spawnable entity)
 function entityForChar(ch) {
   switch (ch) {
@@ -268,17 +299,19 @@ export function buildLevelLayout(meta) {
   const gaps = [];
   const entities = [];
   const cells = [];          // per-row 8-char drivability map for grid-accurate geometry
+  const paths = [];          // 3D spline features (loop/hill/valley/slalom)
+  const rolls = [];          // tangent-roll features (corkscrew/invert/halfpipe)
   let offset = 0;
   for (const seg of segs) {
     const construction = /construction/i.test(seg.name);
     const grid = seg.grid || (seg.rows || []).map((r) => r.slice(1, 9).padEnd(GRID_COLS, ' '));
     // A segment with 'P' control rows is a 3D PATH/curve section (loop, half-
-    // pipe, twister...). The blank rows in it are the air over that curve, NOT
-    // a fall-gap. We can't reconstruct the 3D curve yet, so we keep the road
-    // continuous (flat) through it and suppress its "gaps". Non-path segments
-    // keep their real gaps (the jumps over chasms).
+    // pipe, twister...). The blank rows in it are the air over that curve, NOT a
+    // fall-gap. We reconstruct the 3D shape by FAMILY and keep the road footprint
+    // continuous (suppress its "gaps"). Non-path segments keep their real gaps.
     const isPath = grid.some((row) => /[Pp]/.test(row));
-    if (!isPath) for (const g of seg.gaps) gaps.push({ at: g.at + offset, len: g.len, construction });
+    if (isPath) addPathFeature(paths, rolls, pathFamily(pathTypeOf(seg)), offset, seg.length);
+    else for (const g of seg.gaps) gaps.push({ at: g.at + offset, len: g.len, construction });
     for (const o of seg.objects) entities.push({ type: o.type, s: o.s + offset, x: o.x });
     for (const row of grid) {
       let cell = row.padEnd(GRID_COLS, ' ').slice(0, GRID_COLS);
@@ -290,7 +323,7 @@ export function buildLevelLayout(meta) {
     }
     offset += seg.length;
   }
-  return { length: offset, gaps, entities, cells, rowUnits: ROW_UNITS };
+  return { length: offset, gaps, entities, cells, rowUnits: ROW_UNITS, paths, rolls };
 }
 
 /** True if a grid cell char is drivable road (anything but the void / wall). */

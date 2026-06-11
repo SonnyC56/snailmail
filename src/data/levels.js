@@ -156,7 +156,9 @@ export function trackDefForLevel(level) {
     hilliness: level.hilliness,
     halfWidth: 6,
     gaps: [],
-    rolls: [],
+    // real 3D track features decoded from the segment Path= markers
+    rolls: (layout.rolls ?? []).slice(),
+    paths: (layout.paths ?? []).slice(),
     // grid-accurate road: per-row drivable cells from the real segment grids
     cells: layout.cells,
     rowUnits: layout.rowUnits,
@@ -179,18 +181,17 @@ export function trackDefForLevel(level) {
     }
   }
 
-  // Banked turns / corkscrews: still procedural dressing keyed off difficulty,
-  // placed so they don't sit on top of a gap launch.
-  const rand = rng(level.seed * 3 + 11);
-  const nRolls = Math.floor(level.difficulty * 3);
-  for (let i = 0; i < nRolls; i++) {
-    const cork = level.difficulty > 0.75 && rand() < 0.28;
-    const len = cork ? 200 + rand() * 140 : 70 + rand() * 70;
-    const at = length * (0.2 + rand() * 0.5);
-    const deg = cork
-      ? (rand() < 0.5 ? 1 : -1) * (180 + rand() * 180)
-      : (rand() < 0.5 ? 1 : -1) * (16 + rand() * 22);
-    def.rolls.push({ at, len, deg, cork });
+  // If the level has no authored 3D features (a flat route), add a little
+  // procedural banking for flavour — but never override the real Path= curves.
+  if (def.rolls.length === 0 && def.paths.length === 0) {
+    const rand = rng(level.seed * 3 + 11);
+    const nRolls = Math.floor(level.difficulty * 2);
+    for (let i = 0; i < nRolls; i++) {
+      const len = 70 + rand() * 70;
+      const at = length * (0.2 + rand() * 0.5);
+      const deg = (rand() < 0.5 ? 1 : -1) * (16 + rand() * 22);
+      def.rolls.push({ at, len, deg, cork: false });
+    }
   }
   return def;
 }
