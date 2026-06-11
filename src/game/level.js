@@ -102,6 +102,7 @@ export class Level {
     P.onFire = (w, origin, s, x) => { this.weapons.fire(w, s, x); a.fire?.(w.kind); };
     P.onLand = () => a.land();
     P.onJumpPod = () => { a.jump(); a.voiceSet('supertramp', { gap: 5 }); };
+    P.onRamp = () => { a.jump(); };   // ramp: just the hop cue, no "Supertramp!" call
     P.onFallStart = () => { a.fall(); this._loseLife('fall'); };
     // going postal: a fast invincible frenzy (player.goPostal already fired) —
     // NOT a life loss. Flash + rage voice + the postal loop sting.
@@ -130,7 +131,12 @@ export class Level {
         }
         case 'ringYellow': {
           const killed = this.entities.smartBomb(P.s);
-          for (const k of killed) { this.score += KILL_PTS[k.type] ?? 100; this.fx.burst(k.mesh.position, 0xffd24d, 14, { speed: 7 }); }
+          for (const k of killed) {
+            this.score += KILL_PTS[k.type] ?? 100;
+            this.fx.burst(k.mesh.position, 0xffd24d, 14, { speed: 7 });
+            // blue garbage was launched tumbling — trail smoke off its arc too
+            if (k.type === 'asteroid') this._garbageBlast(k);
+          }
           this.kills += killed.length;
           a.boost(); this.cam.addShake(0.5);
           this.fx.flash(pos, 'PARTICLERING-BIG', { color: 0xffe27a, size: 3, size1: 11, life: 0.55, spin: 3 });
@@ -172,6 +178,7 @@ export class Level {
 
     this.entities.onTurretFire = (e, player) => this._spawnEnemyLaser(e);
     this.entities.onJumpPod = () => { P.launch(1); };
+    this.entities.onRamp = () => { P.launch(0.6, { flat: true }); };
     this.entities.onMailStop = () => this._win();
 
     this.weapons.onHit = (e, shot) => {
@@ -192,6 +199,12 @@ export class Level {
           this.fx.flash(e.mesh.position, 'PARTICLEEXPLODE-SMALL', { color: 0x7a5836, size: 1.8, size1: 4.5, life: 0.4 });
           a.hit(); a.voiceSet('enemies', { gap: 7 });
           a.slugVoice(['SLUG-DEATH1', 'SLUG-DEATH2', 'SLUG-DESTROY', 'SLUG-GOTHIM']);   // the slug's last words
+        } else if (e.type === 'asteroid') {
+          // blue garbage blasted away: entities.damageEntity launched it
+          // tumbling in a random direction — trail SMOKE off the back of it +
+          // a small spark pop, no big fireball.
+          this._garbageBlast(e);
+          a.hit();
         } else {
           const col = e.type === 'turret' ? 0xff8866 : 0x8a7a6a;
           this.fx.burst(e.mesh.position, col, e.type === 'turret' ? 22 : 14, { speed: 7 });
@@ -209,6 +222,18 @@ export class Level {
       this.fx.burst(pos, kind === 'rocket' ? 0xffaa33 : 0xfff1a0, 6, { speed: 4, life: 0.3 });
       this.fx.flash(pos, 'COLLISION', { color: kind === 'rocket' ? 0xffbb55 : 0xffe9a0, size: 1.2, size1: 2.6, life: 0.22 });
     };
+  }
+
+  /**
+   * Garbage-killed FX: the entity was already launched (entities.damageEntity
+   * set e.fly with a random launch dir). Trail SMOKE puffs along that direction
+   * so the blue garbage streams smoke as it tumbles off, plus a tiny spark pop.
+   */
+  _garbageBlast(e) {
+    const pos = e.mesh.position.clone();
+    const dir = e.fly?.dir ?? new THREE.Vector3(0, 1, 0);
+    this.fx.smokeTrail(pos, dir, { puffs: 6, size: 0.9, size1: 2.4, life: 0.6, color: 0xbfc4cc, back: 1.6 });
+    this.fx.burst(pos, 0x9fe0ff, 8, { speed: 5, life: 0.3 });
   }
 
   _damage(amount, pos, color) {

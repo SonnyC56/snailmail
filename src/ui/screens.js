@@ -155,19 +155,29 @@ export class Screens {
     const art = document.createElement('img');
     art.className = 'loading-art';
     applyImage(art, 'SPRITES/LOADING');
-    const bar = document.createElement('div');
-    bar.className = 'loading-bar';
+    // The LOADING graphic already contains an empty progress-bar slot under the
+    // 'Loading' snail. We overlay the LOADINGBARON gold fill INSIDE that slot
+    // (positioned by % of the 640x480 art) and reveal it left->right by width,
+    // so the bar in the artwork itself reads as the real progress indicator —
+    // no separate standalone bar beneath it.
+    const slot = document.createElement('div');
+    slot.className = 'loading-bar-slot';
+    // clip reveals the gold fill left->right; the inner fill spans the WHOLE slot
+    // so the bar grows (and its caps stay put) instead of squishing.
+    const clip = document.createElement('div');
+    clip.className = 'loading-bar-clip';
     const fill = document.createElement('div');
     fill.className = 'loading-bar-fill';
     getSpriteURL('SPRITES/LOADINGBARON').then((u) => { if (u) fill.style.backgroundImage = `url(${u})`; });
-    bar.appendChild(fill);
-    wrap.append(art, bar);
+    clip.appendChild(fill);
+    slot.appendChild(clip);
+    wrap.append(art, slot);
     s.appendChild(wrap);
     const start = performance.now();
     const DUR = 1100;
     const tick = () => {
       const e = Math.min(1, (performance.now() - start) / DUR);
-      fill.style.width = `${Math.round(e * 100)}%`;
+      clip.style.width = `${Math.round(e * 100)}%`;
       if (e < 1) requestAnimationFrame(tick);
       else onDone?.();
     };

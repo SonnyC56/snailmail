@@ -20,6 +20,8 @@ export class Game {
     this.ctx = ctx; // { renderer, scene, camera, input, audio, save }
     this.hudRoot = document.getElementById('hud');
     this.uiRoot = document.getElementById('ui-root');
+    this._canvas = document.getElementById('game-canvas');
+    this._cursorHidden = false;
     this.hud = null;
     this.screens = new Screens(this.uiRoot, ctx.audio, ctx.save);
 
@@ -236,6 +238,16 @@ export class Game {
     } else if (this.state === State.PAUSED) {
       if (input.pausePressed) this.resume();
     }
+    this._syncCursor();
+  }
+
+  /** Hide the system cursor while actually racing (you steer with mouse motion,
+   *  not a pointer), and restore it for menus / pause / results. */
+  _syncCursor() {
+    const hide = this.state === State.PLAYING;
+    if (hide === this._cursorHidden) return;
+    this._cursorHidden = hide;
+    if (this._canvas) this._canvas.style.cursor = hide ? 'none' : '';
   }
 
   frame(alpha, elapsed) {

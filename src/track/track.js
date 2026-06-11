@@ -28,6 +28,7 @@ import { assets } from '../assets.js';
 const SAMPLE_STEP = 1.0;     // frame sample spacing along s
 const RING_STEP = 2.0;       // mesh ring spacing along s
 const LANE_LINES = 4;        // painted lane divisions
+const LOOP_LIFT = 6.0;       // extra apex height on loops so a jump arc can't skim the top
 
 // grid lane geometry (matches segments.js colToX: 8 lanes across ±5)
 const GRID_COLS = 8;
@@ -156,6 +157,7 @@ export class Track {
       const tan = baseCurve.getTangentAt(u0, tmp).normalize();
       let by = Math.atan2(tan.x, -tan.z);          // baseline yaw
       let bp = Math.asin(clamp(tan.y, -1, 1));      // baseline pitch
+      let liftY = 0;
       const pf = paths.find((p) => s >= p.at && s < p.at + p.len);
       if (pf) {
         const u = (s - pf.at) / pf.len;             // 0..1 through the feature
@@ -171,8 +173,13 @@ export class Track {
           // loop). The bow is a single smooth lobe: zero offset and zero rate at
           // both ends, peak in the middle. Direction alternates deterministically
           // per loop so successive loops lean to opposite sides.
-          const dir = (Math.floor(pf.at / 11) % 2) ? 1 : -1;
-          by += dir * 0.9 * smoothBump(u);
+          const bowDir = (Math.floor(pf.at / 11) % 2) ? 1 : -1;
+          by += bowDir * 0.9 * smoothBump(u);
+          // Raise the whole loop so its apex sits well above a normal jump arc —
+          // you ride THROUGH the loop to grab its upgrade instead of skimming
+          // over the top. smoothBump keeps the lift C1 (zero value & rate at the
+          // entry/exit, peak at the apex), so the road still meets grade cleanly.
+          liftY = LOOP_LIFT * smoothBump(u);
         }
         // Hills/valleys: a smooth vertical arc that climbs (or dips) then returns
         // exactly to grade. The windowed S-wave gives net-zero pitch integral
@@ -191,7 +198,7 @@ export class Track {
       }
       const dir = new THREE.Vector3(Math.sin(by) * Math.cos(bp), Math.sin(bp), -Math.cos(by) * Math.cos(bp));
       cur.addScaledVector(dir, step);
-      pts.push(cur.clone());
+      const p = cur.clone(); p.y += liftY; pts.push(p);
     }
     this.curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal', 0.5);
     this.curve.arcLengthDivisions = pts.length * 12;
@@ -296,6 +303,32 @@ export class Track {
     }
     for (const g of this.gaps) if (s >= g.start && s <= g.end) return null;
     return { min: -this.halfWidth + 0.6, max: this.halfWidth - 0.6 };
+  }
+
+  /** Where the SIDE BARRIERS (slipstream walls) sit and which sides are OPEN.
+   *  A barrier exists on a side only where the road reaches its true edge (the
+   *  grid '@' wall); where the road instead falls away into the void (a ledge or
+   *  hole), that side is OPEN — no wall — so you can ride off and fall there.
+   *  Returns { min, max, minOpen, maxOpen } (min/max = drivable edge x), or null
+   *  when the whole row is void (a full gap you must jump). */
+  barrierExtent(s) {
+    if (this.cells) {
+      const row = Math.floor(s / this.rowUnits);
+      if (row < 0 || row >= this.cells.length) return { min: -GRID_X_EDGE, max: GRID_X_EDGE, minOpen: false, maxOpen: false };
+      let lo = -1, hi = -1;
+      for (let c = 0; c < GRID_COLS; c++) {
+        const ch = this.cells[row][c];
+        if (ch !== ' ' && ch !== '@' && ch !== undefined) { if (lo < 0) lo = c; hi = c; }
+      }
+      if (lo < 0) return null;                          // full gap
+      return {
+        min: gridColToX(lo), max: gridColToX(hi),
+        minOpen: lo > 0,                 // road doesn't reach the left edge → drop on the left
+        maxOpen: hi < GRID_COLS - 1,     // road doesn't reach the right edge → drop on the right
+      };
+    }
+    for (const g of this.gaps) if (s >= g.start && s <= g.end) return null;
+    return { min: -this.halfWidth + 0.6, max: this.halfWidth - 0.6, minOpen: false, maxOpen: false };
   }
 
   nextGap(s) {
@@ -517,17 +550,20 @@ export class Track {
   _buildEdges(theme) {
     const group = new THREE.Group();
     const railMat = new THREE.MeshBasicMaterial({ color: theme.rail });
-    // blue slipstream barrier walls that keep you on the track — they hug the
-    // drivable edge and break only at gaps (where you can fall).
+    // Original BARRIER side-rail texture on the slipstream walls. The walls hug
+    // the road's TRUE edge and BREAK at every drop — full gaps AND the open side
+    // of a ledge (where the road falls away) — so you can ride off the edge and
+    // fall there instead of being channelled cleanly around the hole.
+    const barrierTex = assets.texture('OBJECTS/BARRIER/BARRIER', { wrap: true });
     const wallMat = new THREE.MeshBasicMaterial({
-      color: 0x5aa6ff, transparent: true, opacity: 0.34, side: THREE.DoubleSide,
-      blending: THREE.AdditiveBlending, depthWrite: false,
+      map: barrierTex, color: 0xbfe0ff, transparent: true, opacity: 0.92,
+      side: THREE.DoubleSide, depthWrite: false,
     });
     const WALL_H = 1.15;
     for (const which of ['min', 'max']) {
       let pts = [];
-      const positions = [], indices = [];
-      const flush = () => {
+      const positions = [], uvs = [], indices = [];
+      const flushTube = () => {
         if (pts.length > 1) {
           const curve = new THREE.CatmullRomCurve3(pts);
           const geo = new THREE.TubeGeometry(curve, Math.max(8, pts.length * 2), 0.14, 5, false);
@@ -537,22 +573,27 @@ export class Track {
       };
       let prev = false;
       for (let s = 0; s <= this.length; s += RING_STEP * 2) {
-        const ext = this.drivableExtent(s);
-        if (!ext) { flush(); prev = false; continue; }       // gap: no barrier here
+        const ext = this.barrierExtent(s);
+        // break the barrier at a full gap OR on the open (drop) side of a ledge
+        const open = !ext || (which === 'min' ? ext.minOpen : ext.maxOpen);
+        if (open) { flushTube(); prev = false; continue; }
         const fr = this.frameAt(s);
         const ex = which === 'min' ? ext.min : ext.max;
         const base = fr.pos.clone().addScaledVector(fr.side, ex);
         const top = base.clone().addScaledVector(fr.up, WALL_H);
         pts.push(top.clone());
         const bi = positions.length / 3;
+        const u = s * 0.12;
         positions.push(base.x, base.y, base.z, top.x, top.y, top.z);
+        uvs.push(u, 0, u, 1);
         if (prev) indices.push(bi - 2, bi - 1, bi, bi - 1, bi + 1, bi);
         prev = true;
       }
-      flush();
+      flushTube();
       if (positions.length) {
         const geo = new THREE.BufferGeometry();
         geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+        geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
         geo.setIndex(indices);
         group.add(new THREE.Mesh(geo, wallMat));
       }

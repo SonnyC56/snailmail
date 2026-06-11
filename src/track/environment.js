@@ -22,7 +22,10 @@ export class Environment {
     // as unreachable pickups/obstacles and the original used only the flat
     // nebula backdrop. Distant planets + stars provide depth instead.
     this._buildLights(theme);
-    scene.fog = new THREE.Fog(theme.fogColor ?? theme.skyBottom, 60, 420);
+    // Push the fog start out and extend the far plane so near/mid geometry stays
+    // crisp and bright; fog only softens the far distance for depth, rather than
+    // muddying the whole track.
+    scene.fog = new THREE.Fog(theme.fogColor ?? theme.skyBottom, 130, 520);
   }
 
   _buildSky(theme) {
@@ -246,12 +249,17 @@ export class Environment {
   }
 
   _buildLights(theme) {
-    const hemi = new THREE.HemisphereLight(theme.lightSky ?? 0xffffff, theme.lightGround ?? 0x445566, 0.95);
+    // Ambient skydome bounce — lifts the whole scene out of shadow. Warmer,
+    // brighter ground bounce so the road reads rich rather than grey/muddy.
+    const hemi = new THREE.HemisphereLight(theme.lightSky ?? 0xffffff, theme.lightGround ?? 0x554b3a, 1.5);
     this.group.add(hemi);
-    const sun = new THREE.DirectionalLight(theme.sunColor ?? 0xfff2d9, 1.25);
+    // Key/sun: the dominant directional, warm. Drives shape + highlights.
+    const sun = new THREE.DirectionalLight(theme.sunColor ?? 0xfff2d9, 2.1);
     sun.position.set(40, 80, 30);
     this.group.add(sun);
-    const fill = new THREE.DirectionalLight(0x8899ff, 0.35);
+    // Cool fill from the opposite side — softens shadows and adds colour
+    // contrast against the warm key without flattening the image.
+    const fill = new THREE.DirectionalLight(0x9fb4ff, 0.6);
     fill.position.set(-50, 20, -40);
     this.group.add(fill);
   }

@@ -141,6 +141,39 @@ export class ParticleFX {
   }
 
   /**
+   * Directional SMOKE trail: a short string of soft grey puffs (original
+   * SMOKE sprite) trailing back along `dir`, drifting and growing as they fade.
+   * Used for the blue garbage being blasted away — the puffs stream off in the
+   * direction it's launched. Reuses the additive flash pool (one puff = one
+   * flash) so it costs nothing extra to maintain.
+   * @param pos    world position the trail starts from
+   * @param dir    THREE.Vector3 the smoke trails along (launch direction)
+   * @param opts   { puffs, size, size1, life, color, spread }
+   */
+  smokeTrail(pos, dir, opts = {}) {
+    const puffs = opts.puffs ?? 5;
+    const d = dir.clone();
+    if (d.lengthSq() < 1e-6) d.set(0, 1, 0); else d.normalize();
+    const back = opts.back ?? 1.4;       // how far back the trail reaches
+    const color = opts.color ?? 0xbfc4cc;
+    for (let i = 0; i < puffs; i++) {
+      const t = i / Math.max(1, puffs - 1);
+      const p = pos.clone().addScaledVector(d, -back * t);
+      // jitter each puff a little so the trail isn't a straight line
+      p.x += (Math.random() - 0.5) * 0.5;
+      p.y += (Math.random() - 0.5) * 0.5;
+      p.z += (Math.random() - 0.5) * 0.5;
+      this.flash(p, 'SMOKE', {
+        color,
+        size: (opts.size ?? 0.9) * (0.7 + t * 0.5),
+        size1: (opts.size1 ?? 2.2) * (0.7 + t * 0.5),
+        life: (opts.life ?? 0.55) * (1 - t * 0.3),
+        spin: (Math.random() - 0.5) * 2.4,
+      });
+    }
+  }
+
+  /**
    * Spawn an expanding additive billboard from an original sprite sheet.
    * @param pos      world position
    * @param sprite   logical path under SPRITES/ (e.g. 'PARTICLEEXPLODE-BIG')

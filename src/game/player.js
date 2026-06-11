@@ -19,8 +19,11 @@ const STEER_ACCEL = 95;        // lateral responsiveness (keyboard/touch)
 const STEER_MAX = 20;          // max lateral speed (units/s)
 const STEER_DAMP = 9;
 const AIR_STEER = 60;          // lateral air-control accel (full mid-flight steering)
-const MOUSE_TRACK = 0.0008;    // mouse position-follow rate (lower = snappier)
+const MOUSE_TRACK = 0.000002;  // mouse position-follow rate (lower = snappier; ~0.07s lag)
 const METER_MAX = 100;
+// How far past the drivable edge you may drift on an OPEN (ledge/drop) side
+// before the surface check drops you — lets you ride off a ledge into the void.
+const EDGE_DRIFT = 5.5;
 
 // weapon chain: index → { name, cooldown, shots, damage, invincible }
 export const WEAPONS = [
@@ -213,18 +216,24 @@ export class Player {
     this._steer(dt, input);
     this._tryFire(input);
 
-    // Side barriers (slipstream walls): you can't steer off the OUTER edge of
-    // the road, but any hole IN the road (interior void / gap) still drops you.
-    const ext = this.track.drivableExtent(this.s);
+    // Side barriers (slipstream walls) only hold you where the road meets its
+    // TRUE edge. On an OPEN side — a ledge or hole where the road falls away —
+    // there is no wall, so you can drift off the edge and fall. Any hole IN the
+    // road still drops you too.
+    const ext = this.track.barrierExtent(this.s);
     if (!ext) { this._startFall(); return; }            // whole row void → fall
-    if (this.x < ext.min) { this.x = ext.min; this.xVel = Math.max(0, this.xVel); }
-    else if (this.x > ext.max) { this.x = ext.max; this.xVel = Math.min(0, this.xVel); }
+    const lo = ext.minOpen ? -EDGE_DRIFT : ext.min;     // open side → drift out to the void & fall
+    const hi = ext.maxOpen ?  EDGE_DRIFT : ext.max;
+    if (this.x < lo) { this.x = lo; this.xVel = Math.max(0, this.xVel); }
+    else if (this.x > hi) { this.x = hi; this.xVel = Math.min(0, this.xVel); }
     // hole within the road (no barrier over a hole) → fall through it
     if (!this.track.hasSurface(this.s, this.x)) { this._startFall(); return; }
   }
 
-  /** Ballistic hop launched by a jump pod / ramp. */
-  launch(power = 1) {
+  /** Ballistic hop launched by a jump pod (trampoline) or a ramp. A ramp passes
+   *  `{ flat:true }` for a faster, lower arc — you roll up and over rather than
+   *  getting popped high by a trampoline. Both clear the gap just ahead. */
+  launch(power = 1, { flat = false } = {}) {
     const fr = this.track.frameAt(this.s);
     this._airPos.copy(this.track.surfacePoint(this.s, this.x)).addScaledVector(fr.up, 0.1);
     // Size the hop to clear the gap just ahead (some are ~27u wide) plus a
@@ -235,8 +244,9 @@ export class Player {
       const g = this.track.gapAt(this.s + ng + 0.5);
       if (g) target = (g.end - this.s) + 9;
     }
-    const vF = Math.max(this.speed * 1.1, 22);
-    const airT = Math.max(0.7, target / vF);
+    // ramp → faster & flatter (lower apex); jump pad → slower & higher pop.
+    const vF = Math.max(this.speed * (flat ? 1.5 : 1.1), flat ? 30 : 22);
+    const airT = Math.max(flat ? 0.45 : 0.7, target / vF);
     const vUp = (GRAVITY * airT) / 2;               // vertical velocity to match that air time
     this._airVel.copy(fr.tangent).multiplyScalar(vF)
       .addScaledVector(fr.up, vUp)
@@ -244,7 +254,7 @@ export class Player {
     this._airUp.copy(fr.up);
     this.state = PlayerState.AIRBORNE;
     this.stateTime = 0;
-    this.onJumpPod?.();
+    (flat ? this.onRamp : this.onJumpPod)?.();
   }
 
   _updateAirborne(dt, input) {

@@ -28,7 +28,9 @@ export class Renderer {
     this.renderer.setPixelRatio(this._targetPixelRatio());
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.1;
+    // Brighter overall exposure. ACES rolls off the top end, so we have headroom
+    // to push this without blowing highlights out to flat white.
+    this.renderer.toneMappingExposure = 1.45;
 
     this.scene = new THREE.Scene();
 

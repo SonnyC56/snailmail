@@ -43,8 +43,8 @@ export class ChaseCamera {
 
   update(dt, player) {
     const track = this.track;
-    const behind = 6.2;
-    const height = 3.0;
+    const behind = 5.4;
+    const height = 3.6;
 
     // sample a point behind the player along the track for a stable anchor
     const camS = Math.max(0, player.s - behind);
@@ -66,8 +66,8 @@ export class ChaseCamera {
     // look at a point ahead of the player
     const aheadFr = track.frameAt(Math.min(player.s + 10, track.length));
     const lookTarget = player.group.position.clone()
-      .addScaledVector(aheadFr.tangent, 6)
-      .addScaledVector(playerNormal, 0.5);
+      .addScaledVector(aheadFr.tangent, 5.2)
+      .addScaledVector(playerNormal, 0.15);
 
     if (!this._initialized) {
       this._pos.copy(desired);

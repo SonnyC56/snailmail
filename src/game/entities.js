@@ -294,6 +294,37 @@ function buildJumpPod() {
   return g;
 }
 
+// A low ramp wedge (rises toward the gap; forward = local -Z) — the gentle
+// segment-end launcher, visually distinct from the green TRAMP trampoline so a
+// "roll up and over" ramp doesn't read as a jump pad.
+function buildRamp() {
+  const g = new THREE.Group();
+  const W = 1.5, back = 1.2, front = -1.2, hi = 0.6;
+  // inclined ramp surface (back-low -> front-high)
+  const surf = new THREE.BufferGeometry();
+  surf.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
+    -W, 0.04, back, W, 0.04, back, W, hi, front,
+    -W, 0.04, back, W, hi, front, -W, hi, front,
+  ]), 3));
+  surf.computeVertexNormals();
+  g.add(new THREE.Mesh(surf, mat(0x8b94a6, { emissive: 0x29313f, emissiveIntensity: 0.45, side: THREE.DoubleSide })));
+  // triangular side walls so it reads as a solid wedge
+  const sideGeo = new THREE.BufferGeometry();
+  sideGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
+    0, 0.04, back, 0, 0.04, front, 0, hi, front,
+  ]), 3));
+  sideGeo.computeVertexNormals();
+  const sideMat = mat(0x6a7486, { side: THREE.DoubleSide });
+  const sL = new THREE.Mesh(sideGeo, sideMat); sL.position.x = -W;
+  const sR = new THREE.Mesh(sideGeo, sideMat); sR.position.x = W;
+  g.add(sL, sR);
+  // yellow leading lip for a "launch here" read
+  const lip = new THREE.Mesh(new THREE.BoxGeometry(2 * W + 0.1, 0.14, 0.2), basic(0xffd24d));
+  lip.position.set(0, hi, front);
+  g.add(lip);
+  return g;
+}
+
 function buildMailStop() {
   const g = new THREE.Group();
   const post = mat(0xd9534f);
@@ -337,6 +368,7 @@ const FACTORIES = {
   pillar: buildPillar,
   sign: buildSign,
   jumppod: buildJumpPod,
+  ramp: buildRamp,
   mailstop: buildMailStop,
 };
 
@@ -355,6 +387,7 @@ const HITBOX = {
   pillar:     [1.0, 0.9, 2.4],   // tall post: only cleared by jetpack/launch height
   sign:       [0.8, 1.0, 1.8],
   jumppod:    [1.6, 1.4, 0.6],
+  ramp:       [1.8, 1.7, 0.5],
   mailstop:   [1.5, 99, 99],
 };
 
@@ -424,6 +457,7 @@ export class EntityManager {
     this.onHazard = null;
     this.onTurretFire = null;
     this.onJumpPod = null;
+    this.onRamp = null;
     this.onMailStop = null;
   }
 
@@ -480,6 +514,21 @@ export class EntityManager {
         if (e.dying > 0) {
           e.dying -= dt;
           if (e.dying <= 0) { e.dying = 0; e.mesh.visible = false; }
+        }
+        // blasted garbage: keep flying off along its launch velocity + tumble,
+        // shrinking and fading until it's gone
+        if (e.fly) {
+          const f = e.fly;
+          f.vel.y -= 9 * dt;                          // a little gravity droop
+          e.mesh.position.addScaledVector(f.vel, dt);
+          // it's a billboard sprite: spin the texture (material rotation) so it
+          // visibly tumbles as it flies
+          if (e.mesh.material) e.mesh.material.rotation += f.spin * dt;
+          f.life -= dt;
+          const k = Math.max(0, f.life / f.maxLife);
+          e.mesh.scale.setScalar(f.scale0 * (0.4 + k * 0.6));
+          if (e.mesh.material) e.mesh.material.opacity = k;
+          if (f.life <= 0) { e.fly = null; e.mesh.visible = false; }
         }
         continue;
       }
@@ -555,6 +604,8 @@ export class EntityManager {
         e.cooldown = 0.8; this.onHazard?.({ type: 'salt', mesh: e.mesh }); break;
       case 'jumppod':
         e.cooldown = 1.0; this.onJumpPod?.(e); break;
+      case 'ramp':
+        e.cooldown = 1.0; this.onRamp?.(e); break;
       case 'mailstop':
         e.alive = false; this.onMailStop?.(e); break;
     }
@@ -580,6 +631,12 @@ export class EntityManager {
         e.dying = 0.18;            // seconds of red-flash before it disappears
         e.hitFlash = 0;            // cancel any in-progress non-death tint
         e.mesh.material.color.setHex(0xff2a2a);
+      } else if (e.type === 'asteroid') {
+        // Blasted garbage doesn't just vanish: launch it tumbling off in a
+        // random direction (biased up & sideways so it arcs away from the
+        // track), then it shrinks/fades in update(). level.js reads the
+        // launch dir to trail SMOKE along it.
+        this._launchGarbage(e);
       } else {
         e.mesh.visible = false;
       }
@@ -588,12 +645,40 @@ export class EntityManager {
     return false;
   }
 
+  /** Give a killed garbage entity a random launch velocity + tumble. */
+  _launchGarbage(e) {
+    const dir = new THREE.Vector3(
+      (Math.random() - 0.5) * 2,
+      0.5 + Math.random() * 0.9,   // bias upward so it flies up and away
+      (Math.random() - 0.5) * 2,
+    ).normalize();
+    const speed = 9 + Math.random() * 6;
+    e.fly = {
+      vel: dir.clone().multiplyScalar(speed),
+      dir,                                   // launch direction for the smoke trail
+      spin: (Math.random() - 0.5) * 8,       // texture tumble (rad/s) for the billboard
+      life: 0.7, maxLife: 0.7,
+      scale0: e.mesh.scale.x || 1,
+    };
+    // sprites use alphaTest which clips the fade; relax it so it can dissolve
+    if (e.mesh.material) {
+      e.mesh.material.transparent = true;
+      e.mesh.material.alphaTest = 0;
+      e.mesh.material.depthWrite = false;
+    }
+  }
+
   /** Smart bomb: kill all shootable enemies ahead within range. */
   smartBomb(fromS, range = 120) {
     const killed = [];
     for (const e of this.entities) {
       if (e.alive && e.shootable && e.s > fromS && e.s < fromS + range) {
-        e.alive = false; e.mesh.visible = false; killed.push(e);
+        e.alive = false;
+        // blue garbage still gets launched + tumbles (smoke is trailed by the
+        // caller); everything else just vanishes in the blast
+        if (e.type === 'asteroid') this._launchGarbage(e);
+        else e.mesh.visible = false;
+        killed.push(e);
       }
     }
     return killed;

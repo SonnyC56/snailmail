@@ -301,9 +301,11 @@ export function entitiesForLevel(level, track, mode = 'story') {
     if (g.construction) {
       ents.push({ type: 'jetpack', s: Math.max(8, g.start - 40), x: 0 });
     }
-    // avoid stacking a second pod where the grid already placed a jump/tramp
-    const near = ents.some((e) => e.type === 'jumppod' && Math.abs(e.s - padS) < 8);
-    if (!near) ents.push({ type: 'jumppod', s: padS, x: 0 });
+    // A gentle RAMP carries you over the gap (roll up and over), NOT a
+    // trampoline pad — pads are reserved for the grid's authored J/( jump pads.
+    // Skip it where the grid already placed a real jump pad or ramp here.
+    const near = ents.some((e) => (e.type === 'jumppod' || e.type === 'ramp') && Math.abs(e.s - padS) < 8);
+    if (!near) ents.push({ type: 'ramp', s: padS, x: 0 });
   }
 
   // --- ensure the level meets its parcel target (real grids occasionally
@@ -458,10 +460,10 @@ export function proceduralEntities(level, track, mode = 'story') {
     s += spacing * (0.8 + rand() * 0.7);
   }
 
-  // ----- jump pods + jetpacks at gaps -----
+  // ----- ramps + jetpacks at gaps -----
   for (const g of track.gaps) {
     if (g.construction) ents.push({ type: 'jetpack', s: Math.max(20, g.start - 40), x: 0 });
-    else ents.push({ type: 'jumppod', s: g.start - 5, x: 0 });
+    else ents.push({ type: 'ramp', s: g.start - 5, x: 0 });
   }
 
   // ----- enemies: density from real Garbage (slug) + Salt probabilities -----
