@@ -11,4 +11,7 @@ test/shots/
 exe_src/
 extracted/
 public/assets/
+public/assets-hd/
 assets-hd/
+.game/          # downloaded game zip + its extraction (install.sh)
+.venv/          # local Python venv for the HD upscaler (install.sh)

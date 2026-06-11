@@ -97,17 +97,53 @@ supply your own `SnailMail.dat`.
 
 ## Quick start
 
+The repo ships **code only** — you supply the original game's assets. The
+one-command installer wires up the whole pipeline (deps → game → extract + stage
+assets → optional HD pack → build):
+
 ```bash
-npm install
-# Extract your own copy of the game and stage the web-usable assets:
-bash tools/stage_assets.sh "path/to/SnailMail.dat"
-npm run dev        # → http://localhost:5173
+git clone https://github.com/SonnyC56/snailmail && cd snailmail
+./install.sh            # interactive — offers to fetch the game for you
+npm run dev             # → http://localhost:5173
 ```
 
-`stage_assets.sh` deobfuscates `SnailMail.dat` (a fixed 256-byte XOR archive),
-extracts ~603 files to `./extracted`, and copies the web-usable ones into
-`./public/assets` (served at `/assets`). Vite serves the app; OGG plays
-natively, TGA decodes via three's `TGALoader`, and `.X2` (DirectX `.x`) meshes
+`install.sh` flags:
+
+| Flag | Effect |
+| --- | --- |
+| _(none)_ | Finds a local `SnailMail.dat`, or **offers to download** the game from the Internet Archive (~11 MB). |
+| `--download` / `-y` | Non-interactively download + build (no prompt). |
+| `--dat "path/to/SnailMail.dat"` | Use a copy you already have installed. |
+| `--zip "path/to/Snail Mail.zip"` | Use an already-downloaded archive. |
+| `--no-hd` | Skip the upscaled HD texture pack. |
+| `--dev` | Start the dev server when setup finishes. |
+
+### Getting the game
+
+The original *Snail Mail* (Sandlot Games / Alpha72, 2004) is archived here:
+
+> 📦 **[archive.org/details/snail-mail_202412](https://archive.org/details/snail-mail_202412)** — the `Snail Mail.zip` download (zip password: `2004`).
+
+`./install.sh` can fetch and unzip it automatically, or point it at your own
+installed copy with `--dat`. Use your **own** copy — the extracted assets are
+gitignored and must not be redistributed.
+
+### What the installer does (or do it by hand)
+
+```bash
+npm install
+# 1. extract the obfuscated archive (256-byte XOR) → ./extracted, then stage the
+#    web-usable media (TGA / OGG / .X2 / .TXT) into ./public/assets:
+bash tools/stage_assets.sh "path/to/SnailMail.dat"
+# 2. (optional) build the upscaled HD texture pack → ./public/assets-hd:
+python3 -m venv .venv && .venv/bin/pip install Pillow
+.venv/bin/python tools/upres_textures.py
+# 3. run it:
+npm run dev             # → http://localhost:5173
+```
+
+Vite serves the app; OGG plays natively, TGA decodes via three's `TGALoader`
+(or the HD pack's PNGs via `TextureLoader`), and `.X2` (DirectX `.x`) meshes
 load through `src/track/xloader.js`.
 
 ---

@@ -17,7 +17,12 @@ if [ ! -f "$DAT" ]; then
 fi
 
 echo "→ Extracting $DAT ..."
-python3 exe_src/extract_full.py "$DAT" extracted
+# committed extractor (tools/) on a fresh clone; fall back to the dev copy.
+if [ -f tools/extract_dat.py ]; then
+  python3 tools/extract_dat.py "$DAT" extracted
+else
+  python3 exe_src/extract_full.py "$DAT" extracted
+fi
 
 echo "→ Staging web assets into public/assets ..."
 rm -rf public/assets
