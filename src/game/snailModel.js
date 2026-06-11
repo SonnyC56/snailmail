@@ -379,6 +379,16 @@ export function buildSnail(colors = SNAIL_COLORS) {
     },
     /** Mount the original weapon mesh for the given WEAPONS index. */
     setWeaponLevel(level) { mountWeapon(level); },
+    /** Swap Turbo's body skin: 'base' | 'damage' | 'invincible' (original TGAs). */
+    setSkin(which) {
+      if (!state.material) return;
+      const name = which === 'damage' ? 'SNAIL-TURBO-DAMAGE'
+        : which === 'invincible' ? 'SNAIL-TURBO-INVINCIBLE' : 'SNAIL-TURBO';
+      if (state._skin === name) return;
+      state._skin = name;
+      state.material.map = assets.texture(`X/${name}`);
+      state.material.needsUpdate = true;
+    },
     /** Show/hide the original jetpack (back pack + thrust flame) while flying. */
     setJetpack(on) {
       state.jetpackOn = on;

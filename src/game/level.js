@@ -187,6 +187,7 @@ export class Level {
           this.fx.burst(e.mesh.position, 0x6a2a9a, 14, { speed: 4, life: 0.5 });
           this.fx.flash(e.mesh.position, 'PARTICLEEXPLODE-SMALL', { color: 0xb86aff, size: 1.8, size1: 4.5, life: 0.4 });
           a.hit(); a.voiceSet('enemies', { gap: 7 });
+          a.slugVoice(['SLUG-DEATH1', 'SLUG-DEATH2', 'SLUG-DESTROY', 'SLUG-GOTHIM']);   // the slug's last words
         } else {
           const col = e.type === 'turret' ? 0xff8866 : 0x8a7a6a;
           this.fx.burst(e.mesh.position, col, e.type === 'turret' ? 22 : 14, { speed: 7 });
@@ -194,8 +195,8 @@ export class Level {
           if (e.type === 'turret') this.cam.addShake(0.25);
         }
       } else {
-        // damaged but alive: slugs flash red for a beat + a hit thunk
-        if (e.type === 'slug') { this.entities.flashHit(e, 0xff3030, 0.3); a.hit(); }
+        // damaged but alive: slugs flash red for a beat + a hit thunk + a yelp
+        if (e.type === 'slug') { this.entities.flashHit(e, 0xff3030, 0.3); a.hit(); a.slugVoice(['SLUG-HIT1', 'SLUG-HIT2', 'SLUG-HIT3']); }
         this.fx.burst(shot.mesh.position, e.type === 'slug' ? 0x9a4ecf : 0xffe23d, 6, { speed: 4, life: 0.3 });
       }
       return died;
@@ -222,6 +223,7 @@ export class Level {
     this.root.add(mesh);
     this.enemyShots.push({ s: turret.s, x: turret.x, mesh, speed: 46, dead: false });
     this.ctx.audio.enemyFire?.();
+    this.ctx.audio.servo?.();   // the turret's mechanical whirr as it tracks/fires
   }
 
   _updateEnemyShots(dt) {
@@ -394,6 +396,13 @@ export class Level {
     // ambient Turbo chatter — the original _VOICE.TXT "Frequency:20"
     this._ambientT = (this._ambientT ?? 14) - dt;
     if (this._ambientT <= 0) { this._ambientT = 16 + Math.random() * 10; this.ctx.audio.voiceSet('misc', { gap: 5 }); }
+
+    // "Snail alert!" — a slug barks when it first comes into range ahead
+    for (const e of this.entities.entities) {
+      if (e.type === 'slug' && e.alive && !e._alerted && e.s > this.player.s && e.s - this.player.s < 35) {
+        e._alerted = true; this.ctx.audio.slugVoice(['SLUG-SNAILALERT'], { gap: 4 }); break;
+      }
+    }
 
     if (this.mode === 'arcade') {
       this.player.baseSpeed = Math.min(this.player.maxSpeed, this.player.baseSpeed + dt * 0.35);

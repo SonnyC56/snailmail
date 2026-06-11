@@ -408,6 +408,11 @@ export class Player {
       this.snail.setPose(pose);
     }
 
+    // original damage / invincible body skins (SNAIL-TURBO-DAMAGE/INVINCIBLE)
+    if (this.snail.setSkin) {
+      this.snail.setSkin(this.invincible ? 'invincible' : (this._damagedTimer > 0 ? 'damage' : 'base'));
+    }
+
     this.snail.animate(t, speedNorm, this.grounded);
     this.jetFlame.scale.y = 1 + Math.sin(t * 30) * 0.3;
     this.jetFlame.material.opacity = 0.7 + Math.sin(t * 25) * 0.2;

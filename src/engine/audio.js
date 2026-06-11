@@ -155,6 +155,24 @@ export class AudioEngine {
     assets.audioBuffer('VOICE', name).then(buf => { this._lastVoice = now; this._playBuf(buf, this.voiceGain, { vol: 0.9 }); }).catch(() => {});
   }
 
+  /** Enemy slug barks — play through the SFX bus with their own throttle so
+   *  they never block Turbo's own voice lines. */
+  slugVoice(names, { gap = 1.6, vol = 0.7 } = {}) {
+    if (!this.ctx || !names || !names.length) return;
+    const now = this.ctx.currentTime;
+    if (now - (this._lastSlug || 0) < gap) return;
+    this._lastSlug = now;
+    const name = names[Math.floor(Math.random() * names.length)];
+    assets.audioBuffer('VOICE', name).then((buf) => this._playBuf(buf, this.sfxGain, { vol })).catch(() => {});
+  }
+
+  /** Turret servo whirr (the original SERVO1/2 mech sounds). */
+  servo() {
+    if (!this.ctx) return;
+    const name = (this._fireToggle % 2) ? 'SERVO2' : 'SERVO1';
+    assets.audioBuffer('SFX2', name).then((buf) => this._playBuf(buf, this.sfxGain, { vol: 0.4 })).catch(() => {});
+  }
+
   /** Play one specific voice line by name (e.g. the tutorial's TUT1..TUT18). */
   voiceFile(name) {
     if (!this.ctx || !name) return;

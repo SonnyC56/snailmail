@@ -6,6 +6,18 @@
 
 import * as THREE from 'three';
 import { assets } from '../assets.js';
+import { xloader } from '../track/xloader.js';
+
+// Original rocket projectile mesh (ROCKET-BASE-000), streamed once + reused.
+let _rocketGeo = null, _rocketMat = null, _rocketReq = false;
+function ensureRocketMesh() {
+  if (_rocketReq) return; _rocketReq = true;
+  xloader.geometry('X', 'ROCKET-BASE-000').then((geo) => {
+    _rocketGeo = geo;
+    const tex = (geo.userData.texture || 'ROCKET.TGA').replace(/\.[^.]+$/, '').toUpperCase();
+    _rocketMat = new THREE.MeshLambertMaterial({ map: assets.texture(`X/${tex}`), side: THREE.DoubleSide });
+  }).catch(() => { /* keep the procedural bolt */ });
+}
 
 const SHOT_SPEED = 70;      // units/s along the track, on top of player speed
 const SHOT_RANGE = 70;      // how far ahead a shot travels before despawning
@@ -37,6 +49,16 @@ function makeShotMesh(kind) {
   const beadCol = isRocket ? 0xffd2a0 : 0xfff6c0;
   const glowCol = isRocket ? 0xff8a30 : 0xffd23a;
   const r = isRocket ? 0.24 : 0.17;
+  if (isRocket) {
+    ensureRocketMesh();
+    if (_rocketGeo) {
+      const m = new THREE.Mesh(_rocketGeo, _rocketMat);
+      m.scale.setScalar(0.5);
+      grp.add(m);
+      grp.add(glowSprite(glowCol, 1.2));   // thruster glow trailing the rocket
+      return grp;
+    }
+  }
   const bead = new THREE.Mesh(new THREE.SphereGeometry(r, 10, 10), new THREE.MeshBasicMaterial({ color: beadCol }));
   grp.add(bead);
   grp.add(glowSprite(glowCol, isRocket ? 1.2 : 0.8));
