@@ -36,6 +36,12 @@ const ORIGINAL_MESH = {
   // NOT the salt crystal mesh — see buildAsteroid.
   // original road signs as set dressing / hazard variants
   sign:     { dir: 'X', name: 'SIGNSTOP', scale: 0.9, lift: 0.7 },
+  // The original CONSTRUCTION sign (X/SIGNCONSTRUCTION.X2 + .TGA) is a flat
+  // billboard ~12 units tall — way too big for the road — so scale it way down
+  // to road size. Placed by levels.js just before each construction gap as a
+  // "road closed ahead, deploy jetpack" warning. Non-shootable set dressing
+  // (no hitbox / collision) so it never blocks the run; it's a visual cue.
+  signConstruction: { dir: 'X', name: 'SIGNCONSTRUCTION', scale: 0.2, lift: 0 },
 };
 
 // the original pillar meshes, narrow → wide; cycled for variety
@@ -276,6 +282,20 @@ function buildSign() {
   return g;
 }
 
+function buildSignConstruction() {
+  // procedural fallback (shown until the original X/SIGNCONSTRUCTION.X2 streams
+  // in): a yellow diamond CONSTRUCTION warning plate on a post.
+  const g = new THREE.Group();
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.6, 8), mat(0x777777));
+  pole.position.y = 0.8;
+  g.add(pole);
+  const plate = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.1, 0.08), mat(0xffb000, { emissive: 0x553300, emissiveIntensity: 0.35 }));
+  plate.position.y = 1.8;
+  plate.rotation.z = Math.PI / 4;   // diamond orientation
+  g.add(plate);
+  return g;
+}
+
 function buildJumpPod() {
   const g = new THREE.Group();
   const ring = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.5, 0.3, 18), mat(0x39e639, { emissive: 0x186618, emissiveIntensity: 0.5 }));
@@ -367,6 +387,7 @@ const FACTORIES = {
   salt: buildSalt,
   pillar: buildPillar,
   sign: buildSign,
+  signConstruction: buildSignConstruction,
   jumppod: buildJumpPod,
   ramp: buildRamp,
   mailstop: buildMailStop,
@@ -386,6 +407,10 @@ const HITBOX = {
   salt:       [1.0, 1.0, 1.2],
   pillar:     [1.0, 0.9, 2.4],   // tall post: only cleared by jetpack/launch height
   sign:       [0.8, 1.0, 1.8],
+  // CONSTRUCTION warning sign: decorative roadside cue (no collision case in
+  // _collide, so touching it does nothing). Hitbox present only so the collide
+  // guard has dimensions to read.
+  signConstruction: [0.8, 1.0, 1.8],
   jumppod:    [1.6, 1.4, 0.6],
   ramp:       [1.8, 1.7, 0.5],
   mailstop:   [1.5, 99, 99],

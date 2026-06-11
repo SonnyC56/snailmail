@@ -23,9 +23,10 @@ const SHOT_SPEED = 70;      // units/s along the track, on top of player speed
 const SHOT_RANGE = 70;      // how far ahead a shot travels before despawning
 
 // Projectiles. The base BLASTER fires a clean bright energy bolt (a glowing
-// bead + soft additive halo) — NOT the PARTICLEBLASTERS star-burst (that's the
-// muzzle flash). Lasers use the original green LAZER bolt sprite. Rockets are
-// a bright orange bolt.
+// bead + soft additive halo) — NOT the PARTICLEBLASTERS star-burst, which is
+// the muzzle flash spawned at the gun barrel by the player fire handler
+// (Level._wire's P.onFire → fx.flash(origin, 'PARTICLEBLASTERS', …)). Lasers
+// use the original green LAZER bolt sprite. Rockets are a bright orange bolt.
 function glowSprite(color, size) {
   const s = new THREE.Sprite(new THREE.SpriteMaterial({
     map: assets.texture('SPRITES/SPARK'), color,

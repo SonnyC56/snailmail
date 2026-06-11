@@ -43,6 +43,17 @@ const BTN = {
 const GALAXY_PLATES = Array.from({ length: 10 }, (_, i) => `GALAXY/GALAXY${String(i).padStart(3, '0')}`);
 const GALAXY_SELECT = 'GALAXY/GALAXYSELECT'; // blue selection ring (128x128)
 const LEVEL_SELECT = 'GALAXY/LEVELSELECT';   // blue ring for an individual level/star (64x64)
+const LINESTAR = 'GALAXY/LINESTAR';          // 8x8 soft star dot — the route connector sprite
+const BORDERSPACEMAP = 'GALAXY/BORDERSPACEMAP'; // 128x128 rounded blue frame tile for the map view
+// Original menu-hover font art: a 2048x64 strip whose rightmost ~15% holds a row
+// of colourful menu icons (snail, galaxy, star, jetpack…). We reveal that icon
+// region as the hover treatment behind/beside a focused menu button.
+const FONT_MENU_HOVER = 'OBJECTS/FONT/FONT-MENU-HOVER';
+const FONT_MENU_HOVER0 = 'OBJECTS/FONT/FONT-MENU-HOVER0';
+const FONT_MENU_HOVER1 = 'OBJECTS/FONT/FONT-MENU-HOVER1';
+// 3D letter font atlas (FONT3D/LETTER) — a chunky serif capital used as a
+// decorative drop-cap beside the route-map heading.
+const FONT3D_LETTER = 'OBJECTS/FONT3D/LETTER';
 
 // Original star-map node placements. The 2004 "Intergalactic Delivery Route"
 // scattered the galaxies as a constellation across the STARMAPBG nebula, joined
@@ -54,8 +65,14 @@ const GALAXY_NODES = [
   { x: 50, y: 58 }, { x: 30, y: 60 },
 ];
 
-// Warm the most-used plates so the title/menu paint without a flash.
-preloadSprites([ART.splashA, ART.splashB, ART.menuA, ART.menuB, ART.starmap]);
+// Warm the most-used plates so the title/menu paint without a flash. We also
+// warm the menu-hover font strip (so the first button hover reveals its icon
+// instantly) and the star-map's LINESTAR / BORDERSPACEMAP / 3D-letter art.
+preloadSprites([
+  ART.splashA, ART.splashB, ART.menuA, ART.menuB, ART.starmap,
+  FONT_MENU_HOVER, FONT_MENU_HOVER0, FONT_MENU_HOVER1,
+  LINESTAR, BORDERSPACEMAP, FONT3D_LETTER,
+]);
 
 export class Screens {
   constructor(root, audio, save) {
@@ -66,6 +83,9 @@ export class Screens {
     // the original menu pointer (SPRITES/MOUSE) — menus only; gameplay keeps the
     // system cursor so steering stays precise.
     getSpriteURL('SPRITES/MOUSE').then((u) => { if (u) this.root.style.cursor = `url(${u}) 3 3, auto`; });
+    // original BORDERGLOW sprite → a soft halo behind every framed panel
+    // (applied via the --border-glow CSS var on .frame-panel::before).
+    getSpriteURL('SPRITES/BORDERGLOW').then((u) => { if (u) document.documentElement.style.setProperty('--border-glow', `url(${u})`); });
   }
 
   on(events) { Object.assign(this.cb, events); return this; }
@@ -110,10 +130,47 @@ export class Screens {
   _btn(label, onClick, cls = '') {
     const b = document.createElement('button');
     b.className = `btn ${cls}`;
-    b.textContent = label;
+    const text = document.createElement('span');
+    text.className = 'btn-label';
+    text.textContent = label;
+    b.appendChild(text);
+    // Original menu-hover font art (FONT-MENU-HOVER): the rightmost end of the
+    // 2048x64 strip is a row of little menu icons. We reveal one of them as a
+    // glowing badge on the focused/hovered button (different icon per button) —
+    // the original game's menu-hover decoration, restored.
+    this._attachHoverFont(b);
     b.addEventListener('click', () => { this.audio.click(); onClick(); });
     b.addEventListener('mouseenter', () => this.audio.highlight());
     return b;
+  }
+
+  /**
+   * Attach the original FONT-MENU-HOVER icon strip as a hover badge. The strip
+   * holds ~9 menu icons clustered in its rightmost region (x≈1700..2010 of 2048);
+   * we crop to one icon cell via background-size/position and reveal it on hover.
+   * Each call advances the cell so consecutive menu items show distinct icons.
+   */
+  _attachHoverFont(b) {
+    const ICON_N = 9;                 // icons in the right-hand cluster
+    const cell = this._hoverFontIdx = ((this._hoverFontIdx ?? -1) + 1);
+    const badge = document.createElement('span');
+    badge.className = 'btn-hover-icon';
+    b.insertBefore(badge, b.firstChild);
+    getSpriteURL(FONT_MENU_HOVER).then((url) => {
+      if (!url || !badge.isConnected) return;
+      // Strip is 2048x64; the colourful icon cluster spans x≈1634..1937. Map
+      // each icon cell to a background-position so one glyph fills the badge.
+      const STRIP_W = 2048, CLUSTER_X = 1634, CLUSTER_W = 306;
+      const stepW = CLUSTER_W / ICON_N;            // px width of one icon cell
+      const x = CLUSTER_X + (cell % ICON_N) * stepW;
+      // background-size scaled so the icon cell maps onto the badge square.
+      const scale = `${(STRIP_W / stepW) * 100}% auto`;
+      const posX = (x / (STRIP_W - stepW)) * 100;
+      badge.style.backgroundImage = `url(${url})`;
+      badge.style.backgroundSize = scale;
+      badge.style.backgroundPosition = `${posX}% 50%`;
+      badge.classList.add('has-sprite');
+    });
   }
 
   /** Original green PLAY sprite as a real button, with a text fallback. */
@@ -259,13 +316,35 @@ export class Screens {
     s.appendChild(logo);
     const title = document.createElement('div');
     title.className = 'starmap-title';
-    title.textContent = mode === 'timetrial' ? 'Time Trial Route' : 'Intergalactic Delivery Route';
+    // Chunky 3D-letter drop-cap (FONT3D/LETTER, a serif capital) leading the
+    // route-map heading — the original 3D font atlas given a tasteful home.
+    const dropCap = document.createElement('img');
+    dropCap.className = 'starmap-dropcap';
+    dropCap.alt = '';
+    applyImage(dropCap, FONT3D_LETTER);
+    const titleText = document.createElement('span');
+    titleText.className = 'starmap-title-text';
+    titleText.textContent = mode === 'timetrial' ? 'Time Trial Route' : 'Intergalactic Delivery Route';
+    title.append(dropCap, titleText);
     s.appendChild(title);
 
     // The star-map: an aspect-fixed field over which galaxy nodes are absolutely
     // positioned by percentage, with an SVG route layer connecting them.
     const map = document.createElement('div');
     map.className = 'starmap-field';
+
+    // Frame the whole star-map view with the original BORDERSPACEMAP art (a
+    // rounded blue space-map border). Used as a border-image so it scales to the
+    // field without stretching its rounded corners; degrades to the CSS panel.
+    const frame = document.createElement('div');
+    frame.className = 'starmap-frame';
+    getSpriteURL(BORDERSPACEMAP).then((url) => {
+      if (!url || !frame.isConnected) return;
+      // 128x128 tile with a ~10px rounded blue border ring → nine-slice it.
+      frame.style.borderImageSource = `url(${url})`;
+      frame.classList.add('has-sprite');
+    });
+    map.appendChild(frame);
 
     const n = GALAXIES.length;
     const pos = (gi) => GALAXY_NODES[gi % GALAXY_NODES.length];
@@ -286,6 +365,37 @@ export class Screens {
       routes.appendChild(line);
     }
     map.appendChild(routes);
+
+    // LINESTAR connectors: lay the original 8x8 star-dot sprite along each
+    // segment between consecutive galaxy nodes so the galaxies read as one
+    // connected delivery route (a "slipstream" of stars strung between worlds).
+    const starLayer = document.createElement('div');
+    starLayer.className = 'starmap-linestars';
+    getSpriteURL(LINESTAR).then((url) => {
+      if (!url || !starLayer.isConnected) return;
+      for (let gi = 0; gi < n - 1; gi++) {
+        const a = pos(gi), b = pos(gi + 1);
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const len = Math.hypot(dx, dy);
+        // ~one star every ~3.2 map-% so segments read as a dotted star trail,
+        // and we skip the very ends so dots don't collide with the node plates.
+        const count = Math.max(1, Math.round(len / 3.2));
+        const lit = mode === 'story' ? this.save.isWorldUnlocked(gi + 1) : true;
+        for (let k = 1; k < count; k++) {
+          const t = k / count;
+          const star = document.createElement('img');
+          star.className = `route-star ${lit ? 'lit' : 'dim'}`;
+          star.src = url;
+          star.alt = '';
+          star.style.left = `${a.x + dx * t}%`;
+          star.style.top = `${a.y + dy * t}%`;
+          // gentle twinkle, phase-staggered along the trail
+          star.style.animationDelay = `${(t * 1.6).toFixed(2)}s`;
+          starLayer.appendChild(star);
+        }
+      }
+    });
+    map.appendChild(starLayer);
 
     // The level/star panel shown for the selected galaxy.
     const starPanel = document.createElement('div');

@@ -99,7 +99,14 @@ export class Level {
     const a = this.ctx.audio;
     const P = this.player;
 
-    P.onFire = (w, origin, s, x) => { this.weapons.fire(w, s, x); a.fire?.(w.kind); };
+    P.onFire = (w, origin, s, x) => {
+      this.weapons.fire(w, s, x); a.fire?.(w.kind);
+      // brief additive muzzle flash star-burst at the gun muzzle (PARTICLEBLASTERS)
+      if (origin) {
+        const col = w.kind === 'rocket' ? 0xffb060 : w.kind === 'laser' ? 0x8affa0 : 0xfff0a0;
+        this.fx.flash(origin, 'PARTICLEBLASTERS', { color: col, size: 0.5, size1: 1.1, life: 0.12, spin: (Math.random() - 0.5) * 8 });
+      }
+    };
     P.onLand = () => a.land();
     P.onJumpPod = () => { a.jump(); a.voiceSet('supertramp', { gap: 5 }); };
     P.onRamp = () => { a.jump(); };   // ramp: just the hop cue, no "Supertramp!" call
@@ -140,6 +147,8 @@ export class Level {
           this.kills += killed.length;
           a.boost(); this.cam.addShake(0.5);
           this.fx.flash(pos, 'PARTICLERING-BIG', { color: 0xffe27a, size: 3, size1: 11, life: 0.55, spin: 3 });
+          // tight inner ring (small variant) snaps out fast inside the big one
+          this.fx.flash(pos, 'PARTICLERING-SMALL', { color: 0xfff3c0, size: 1, size1: 4.5, life: 0.3, spin: -5 });
           this._emit('smartbomb', { count: killed.length, pos });
           break;
         }
@@ -171,6 +180,8 @@ export class Level {
           P.slow(2.2); a.hit();
           this.fx.burst(pos, 0xe04040, 10, { speed: 3 });
           this.fx.flash(pos, 'PARTICLESLOW-BIG', { color: 0xff6a6a, size: 2.4, size1: 6.5, life: 0.5, spin: -2 });
+          // small secondary slow ring spins the other way for a denser stall burst
+          this.fx.flash(pos, 'PARTICLESLOW-SMALL', { color: 0xffb0b0, size: 1.1, size1: 3.4, life: 0.35, spin: 3 });
           this._emit('slowed', { pos });
           break;
       }
@@ -197,6 +208,8 @@ export class Level {
           // dirt-like clod explosion kicks up from the ground + squish + taunt
           this.fx.dirtBurst(e.mesh.position, 26, { speed: 8 });
           this.fx.flash(e.mesh.position, 'PARTICLEEXPLODE-SMALL', { color: 0x7a5836, size: 1.8, size1: 4.5, life: 0.4 });
+          // greenish goo splat (SLUGGOO) on top of the dirt — the slug bursts
+          this.fx.flash(e.mesh.position, 'SLUGGOO', { color: 0x9adf4a, size: 1.2, size1: 3.2, life: 0.35, spin: (Math.random() - 0.5) * 4 });
           a.hit(); a.voiceSet('enemies', { gap: 7 });
           a.slugVoice(['SLUG-DEATH1', 'SLUG-DEATH2', 'SLUG-DESTROY', 'SLUG-GOTHIM']);   // the slug's last words
         } else if (e.type === 'asteroid') {
@@ -441,6 +454,20 @@ export class Level {
     for (const e of this.entities.entities) {
       if (e.type === 'slug' && e.alive && !e._alerted && e.s > this.player.s && e.s - this.player.s < 35) {
         e._alerted = true; this.ctx.audio.slugVoice(['SLUG-SNAILALERT'], { gap: 4 }); break;
+      }
+    }
+
+    // rival-slug taunts: when a live slug is right alongside / passing the
+    // player, it occasionally jeers ("he's too fast!" / victory crows). Fires
+    // through the slug (SFX) bus with its own throttle so it never blocks Turbo.
+    for (const e of this.entities.entities) {
+      if (e.type === 'slug' && e.alive && !e._taunted && Math.abs(e.s - this.player.s) < 4) {
+        e._taunted = true;
+        if (Math.random() < 0.5) {
+          const set = this.ctx.audio.voiceLines?.('slugTaunt') ?? ['SLUG-HESTOOFAST', 'SLUG-VICTORY', 'SLUG-VICTORY2'];
+          this.ctx.audio.slugVoice(set, { gap: 8 });
+        }
+        break;
       }
     }
 

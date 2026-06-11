@@ -246,6 +246,10 @@ export function buildSnail(colors = SNAIL_COLORS) {
     jetpackOn: false,        // FLYING state mounts the original jetpack
     jetpackReq: false,       // load requested (guards double-load)
     jetpackMesh: null,       // JETPACK-BASE on Turbo's back
+    jetpackBaseGeo: null,    // settled pose (shown after the deploy plays out)
+    jetpackDrawGeos: [],     // JETPACK-DRAW deploy frames (quick 2-frame unfold)
+    jetpackDeploying: false, // currently playing the deploy animation
+    jetpackDeployStart: null,
     thrustMesh: null,        // JETPACKTHRUST flame (3-frame loop)
     thrustGeos: [],
   };
@@ -338,7 +342,14 @@ export function buildSnail(colors = SNAIL_COLORS) {
     for (const name of spec.meshes) {
       try {
         const geo = await xloader.geometry('X', name);
-        const texName = (geo.userData.texture || 'BLASTERS.TGA').replace(/\.[^.]+$/, '').toUpperCase();
+        // The LEFT/RIGHT blaster meshes embed BLASTERS.TGA, so they'd otherwise
+        // never use the dedicated SIDE-BLASTER.TGA skin authored for the side
+        // guns. Override the side-blaster meshes to that texture so the twin
+        // side cannons read distinctly from the centre BLASTERTOP.
+        const isSideBlaster = /^BLASTER(LEFT|RIGHT)/.test(name);
+        const texName = isSideBlaster
+          ? 'SIDE-BLASTER'
+          : (geo.userData.texture || 'BLASTERS.TGA').replace(/\.[^.]+$/, '').toUpperCase();
         let m = state.weaponMats.get(texName);
         if (!m) {
           m = new THREE.MeshLambertMaterial({ map: assets.texture(`X/${texName}`), transparent: true, alphaTest: 0.3, side: THREE.DoubleSide });
@@ -385,10 +396,23 @@ export function buildSnail(colors = SNAIL_COLORS) {
     state.jetpackReq = true;
     try {
       const baseGeo = await xloader.geometry('X', 'JETPACK-BASE-000');
+      state.jetpackBaseGeo = baseGeo;
       const bTex = (baseGeo.userData.texture || 'JETPACK.TGA').replace(/\.[^.]+$/, '').toUpperCase();
       state.jetpackMesh = new THREE.Mesh(baseGeo, new THREE.MeshLambertMaterial({ map: assets.texture(`X/${bTex}`), side: THREE.DoubleSide }));
       state.jetpackMesh.visible = state.jetpackOn;
       turbo.add(state.jetpackMesh);
+      // The DEPLOY animation: the pack unfolds from Turbo's back over two frames
+      // (JETPACK-DRAW-000/001, share the JETPACK texture) before settling onto
+      // the JETPACK-BASE pose. Loaded here so setJetpack(true) can play it.
+      for (const n of ['JETPACK-DRAW-000', 'JETPACK-DRAW-001']) {
+        try { state.jetpackDrawGeos.push(await xloader.geometry('X', n)); } catch { /* skip a missing deploy frame */ }
+      }
+      // If the jetpack was switched on before its meshes finished streaming,
+      // kick off the deploy now that the frames exist.
+      if (state.jetpackOn && state.jetpackDrawGeos.length) {
+        state.jetpackDeploying = true;
+        state.jetpackDeployStart = null;
+      }
       for (const n of ['JETPACKTHRUST-BASE-000', 'JETPACKTHRUST-BASE-001', 'JETPACKTHRUST-BASE-002']) {
         try { state.thrustGeos.push(await xloader.geometry('X', n)); } catch { /* skip */ }
       }
@@ -444,8 +468,21 @@ export function buildSnail(colors = SNAIL_COLORS) {
     },
     /** Show/hide the original jetpack (back pack + thrust flame) while flying. */
     setJetpack(on) {
+      const wasOn = state.jetpackOn;
       state.jetpackOn = on;
       if (on) loadJetpack();
+      // Play the quick two-frame DEPLOY (pack unfolds) when the jetpack first
+      // activates; settle on JETPACK-BASE afterwards (handled in animate()).
+      if (on && !wasOn && state.jetpackDrawGeos.length) {
+        state.jetpackDeploying = true;
+        state.jetpackDeployStart = null;
+        if (state.jetpackMesh) state.jetpackMesh.geometry = state.jetpackDrawGeos[0];
+      }
+      if (!on) {
+        state.jetpackDeploying = false;
+        // reset to the settled pose so the next mount deploys from frame 0
+        if (state.jetpackMesh && state.jetpackBaseGeo) state.jetpackMesh.geometry = state.jetpackBaseGeo;
+      }
       if (state.jetpackMesh) state.jetpackMesh.visible = on && state.loaded;
       if (state.thrustMesh) state.thrustMesh.visible = on && state.loaded;
     },
@@ -468,6 +505,19 @@ export function buildSnail(colors = SNAIL_COLORS) {
           ? Math.floor((t - state._poseStartT) * fps)
           : Math.floor(t * fps);
         applyPoseFrame(frameIdx);
+        // jetpack DEPLOY: when the pack mounts, play JETPACK-DRAW-000/001 as a
+        // quick two-frame unfold, then settle onto the JETPACK-BASE pose.
+        if (state.jetpackDeploying && state.jetpackMesh && state.jetpackDrawGeos.length) {
+          if (state.jetpackDeployStart == null) state.jetpackDeployStart = t;
+          const e = (t - state.jetpackDeployStart) / 0.18;   // ~0.18s deploy
+          if (e >= 1) {
+            state.jetpackDeploying = false;
+            if (state.jetpackBaseGeo && state.jetpackMesh.geometry !== state.jetpackBaseGeo) state.jetpackMesh.geometry = state.jetpackBaseGeo;
+          } else {
+            const k = Math.min(state.jetpackDrawGeos.length - 1, Math.floor(e * state.jetpackDrawGeos.length));
+            if (state.jetpackMesh.geometry !== state.jetpackDrawGeos[k]) state.jetpackMesh.geometry = state.jetpackDrawGeos[k];
+          }
+        }
         // animate the jetpack thrust flame (3-frame loop) while flying
         if (state.thrustMesh && state.thrustMesh.visible && state.thrustGeos.length) {
           const ti = Math.floor(t * 12) % state.thrustGeos.length;

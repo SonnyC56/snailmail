@@ -18,6 +18,7 @@ export class Environment {
     this._buildSky(theme);
     this._buildStars(theme, seed);
     this._buildPlanets(theme, seed);
+    this._buildBlackHole(theme, seed);
     // Note: decorative track-side props are intentionally disabled — they read
     // as unreachable pickups/obstacles and the original used only the flat
     // nebula backdrop. Distant planets + stars provide depth instead.
@@ -147,6 +148,55 @@ export class Environment {
       this.group.add(g);
       this._spinners.push({ obj: g, speed: 0.04 + rand() * 0.05 });
     }
+  }
+
+  /** A single distant BLACK HOLE far out in the backdrop: the original
+   *  OBJECTS/UNIVERSE/HOLE billboard (dark void disc) wrapped in the
+   *  OBJECTS/UNIVERSE/FRINGE accretion halo. Both are additive sprites pinned
+   *  near the star-dome radius so they sit *behind* the planets, reading as a
+   *  far-away depth cue rather than a reachable prop. The halo rotates slowly.
+   */
+  _buildBlackHole(theme, seed) {
+    const rand = rng(seed * 53 + 19);
+    const group = new THREE.Group();
+
+    // Park it well off to one side and slightly above the horizon, just inside
+    // the star dome (radius ~640) so it never pokes through nearer geometry.
+    const az = (theme.holeAzimuth ?? (0.6 + rand() * 0.6)) * Math.PI; // upper hemisphere arc
+    const dir = new THREE.Vector3(Math.cos(az), 0.18 + rand() * 0.22, Math.sin(az)).normalize();
+    group.position.copy(dir.multiplyScalar(600));
+
+    // FRINGE halo (accretion ring/glow) — additive so it bleeds light. Drawn
+    // first / larger and BEHIND the void disc.
+    const fringe = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: assets.texture('OBJECTS/UNIVERSE/FRINGE'),
+      color: theme.holeFringe ?? 0x8a6bff,
+      transparent: true, blending: THREE.AdditiveBlending,
+      depthWrite: false, depthTest: false, fog: false, opacity: 0.5,
+    }));
+    fringe.scale.set(150, 150, 1);
+    fringe.renderOrder = -3;       // behind planets/stars, in front of the dome
+    group.add(fringe);
+
+    // HOLE — the dark void disc that sits in the centre of the halo. Additive
+    // blending on a near-black texture keeps it subtle (it darkens little, just
+    // shows the rim detail) so the feature reads as a glowing ringed void.
+    const hole = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: assets.texture('OBJECTS/UNIVERSE/HOLE'),
+      transparent: true, blending: THREE.AdditiveBlending,
+      depthWrite: false, depthTest: false, fog: false, opacity: 0.85,
+    }));
+    hole.scale.set(95, 95, 1);
+    hole.renderOrder = -2;
+    group.add(hole);
+
+    this.group.add(group);
+    this.blackHole = group;
+    // remember the fixed sky-offset so update() can re-pin it to the camera
+    this._holeOffset = group.position.clone();
+    // Slowly rotate the whole feature so the halo swirls (sprites stay
+    // camera-facing; the Z-roll spins the ring around the void).
+    this._spinners.push({ obj: group, speed: 0.05 + rand() * 0.04, axis: 'z' });
   }
 
   /** Themed props floating near the track so speed reads visually. */
@@ -279,7 +329,13 @@ export class Environment {
       }
     }
     if (this.stars) this.stars.position.copy(cameraPos);
-    for (const s of this._spinners) s.obj.rotation.y += s.speed * dt;
+    // Keep the distant black hole pinned to the camera so it reads as infinitely
+    // far away (it doesn't slide past as you race down the track).
+    if (this.blackHole && this._holeOffset) this.blackHole.position.copy(cameraPos).add(this._holeOffset);
+    for (const s of this._spinners) {
+      if (s.axis === 'z') s.obj.rotation.z += s.speed * dt;
+      else s.obj.rotation.y += s.speed * dt;
+    }
   }
 
   /** Endless mode: slowly wash the sky + fog through a hue cycle so a long run

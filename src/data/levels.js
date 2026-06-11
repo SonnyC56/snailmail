@@ -300,6 +300,9 @@ export function entitiesForLevel(level, track, mode = 'story') {
     const padS = Math.max(8, g.start - 5);
     if (g.construction) {
       ents.push({ type: 'jetpack', s: Math.max(8, g.start - 40), x: 0 });
+      // CONSTRUCTION warning sign on the roadside just ahead of the gap (and
+      // just past the jetpack pickup) so you read "road closed — deploy jetpack".
+      ents.push({ type: 'signConstruction', s: Math.max(10, g.start - 22), x: HW * 0.8 });
     }
     // A gentle RAMP carries you over the gap (roll up and over), NOT a
     // trampoline pad — pads are reserved for the grid's authored J/( jump pads.
@@ -462,8 +465,11 @@ export function proceduralEntities(level, track, mode = 'story') {
 
   // ----- ramps + jetpacks at gaps -----
   for (const g of track.gaps) {
-    if (g.construction) ents.push({ type: 'jetpack', s: Math.max(20, g.start - 40), x: 0 });
-    else ents.push({ type: 'ramp', s: g.start - 5, x: 0 });
+    if (g.construction) {
+      ents.push({ type: 'jetpack', s: Math.max(20, g.start - 40), x: 0 });
+      // roadside CONSTRUCTION warning sign just before the gap
+      ents.push({ type: 'signConstruction', s: Math.max(22, g.start - 22), x: HW * 0.8 });
+    } else ents.push({ type: 'ramp', s: g.start - 5, x: 0 });
   }
 
   // ----- enemies: density from real Garbage (slug) + Salt probabilities -----

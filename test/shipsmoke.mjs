@@ -31,6 +31,13 @@ await p.evaluate(() => localStorage.setItem('snailx.save.v1', '{"seenIntro":true
 await p.mouse.click(640, 400); await sleep(400);
 
 const out = {};
+// 0) Menus + star-map — exercises LINESTAR/BORDERSPACEMAP/hover-font/dropcap wiring
+await p.evaluate(() => { const g = window.__snail.game; g.goModeSelect?.(); });
+await sleep(400);
+await p.evaluate(() => { const g = window.__snail.game; g.screens?.showLevelSelect?.('story'); });
+await sleep(800);
+out.menus = await p.evaluate(() => ({ routeStars: document.querySelectorAll('.route-star').length, frame: !!document.querySelector('.starmap-frame') }));
+
 // 1) Tutorial — exercises SpaceRed bg + ramps + barriers
 await p.evaluate(() => window.__snail.game.startTutorial()); await sleep(4500);
 out.tutorial = await p.evaluate(() => {
@@ -60,6 +67,7 @@ out.arcade = await p.evaluate(() => {
   return { status: lv?.status, len: Math.round(lv?.track?.length ?? 0), pkgs: lv?.entities?.countTotal?.('package') ?? 0, notFalling: lv?.player?.state !== 'falling' };
 });
 
+console.log('MENUS    ', JSON.stringify(out.menus));
 console.log('TUTORIAL ', JSON.stringify(out.tutorial));
 console.log('ENDLESS  ', JSON.stringify(out.endless));
 console.log('ARCADE   ', JSON.stringify(out.arcade));

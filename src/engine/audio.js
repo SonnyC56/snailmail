@@ -181,6 +181,10 @@ export class AudioEngine {
       .catch(() => {});
   }
 
+  /** Read a named VOICE set's line list (e.g. enemy slug taunts) so callers can
+   *  route those lines through a different bus (slugVoice) instead of Turbo's. */
+  voiceLines(setName) { return VOICE_SETS[setName] ? VOICE_SETS[setName].slice() : null; }
+
   /** Play a random Turbo quip from a named set (from the original _VOICE.TXT). */
   voiceSet(setName, { force = false, gap = 2.0 } = {}) {
     if (!this.ctx) return;
@@ -293,7 +297,9 @@ const VOICE_SETS = {
   enemies:   ['ALWAYSTIPYOURMAILCARRIER', 'ALWAYSTIPYOURPOSTALWORKER', 'BACKOFF', 'BACKOFFSLUGS', 'COMINGTHROUGH', 'MAKEWAY'],
   fall:      ['FALL1', 'FALL2', 'FALL3'],
   package:   ['POSTAGEDUE', 'SOMEBODYCALLFORADELIVERY', 'SPECIALDELIVERY', 'SPEEDYDELIVERY'],
-  misc:      ['CHECKMEOUT', 'DONTHATEME', 'FOOTACHE', 'GOTMAIL', 'ISURECOULDUSE', 'ITSNOTJUSTASHELL', 'MYNAMEISTURBO', 'PARTFOOTPARTTUMMY', 'SNAILSINSPACE', 'THATWASCOOL', 'HELLINASHELL', 'TRAILBLAZER', 'ESCARGOT'],
+  misc:      ['CHECKMEOUT', 'DONTHATEME', 'FOOTACHE', 'GOTMAIL', 'ISURECOULDUSE', 'ITSNOTJUSTASHELL', 'MYNAMEISTURBO', 'PARTFOOTPARTTUMMY', 'SNAILSINSPACE', 'THATWASCOOL', 'HELLINASHELL', 'TRAILBLAZER', 'ESCARGOT', 'TODAYTHEMAIL'],
+  // slug taunts — the rival snails jeer when they're near / pass the player
+  slugTaunt: ['SLUG-HESTOOFAST', 'SLUG-VICTORY', 'SLUG-VICTORY2'],
   powerup:   ['FULLYLOADED', 'HELLINASHELL', 'IMONFIRE', 'IMONFIREBABY', 'IMPACKIN', 'MYNEWMAILINGTECHNIQUE', 'MYSHELLISTRICKEDOUT', 'SMOKIN', 'SOMEBODYSTOPME', 'TRAILBLAZER', 'THATWASAWESOME'],
   slow:      ['AMIEVENMOVING', 'ANYSLOWER', 'COMEON', 'FASTERISBETTER', 'ICANDOBETTER', 'FASTERWOULDBEBETTER', 'ISLEEPFASTERTHANTHIS'],
   start:     ['ALLOWSIXTOEIGHTMINUTES', 'BRINGITON', 'IFEELTHENEEDFORSPEED', 'JUSTRYANDSTOPME', 'THISISAJOB', 'TURBOSTHENAME', 'WATCHOUT', 'ZOOMZOOM', 'SNAILMAILALWAYSONTIME', 'SNAILMAILINTHIRTYMINUTES'],
