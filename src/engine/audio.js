@@ -198,7 +198,8 @@ export class AudioEngine {
   /** worldIndex selects the original gameplay track; 'menu' uses MAINMENU. */
   async playMusic(which) {
     if (!this.ctx) return;
-    const name = which === 'menu' ? 'MAINMENU' : WORLD_MUSIC[(which | 0) % WORLD_MUSIC.length];
+    const name = which === 'menu' ? 'MAINMENU' : which === 'crawl' ? 'INTROTEXT' : WORLD_MUSIC[(which | 0) % WORLD_MUSIC.length];
+    const loop = which !== 'crawl';   // the intro narration bed plays once
     if (this._musicName === name && this._music) return; // already playing this track
     this.stopMusic();
     this._musicName = name;
@@ -207,7 +208,7 @@ export class AudioEngine {
       const buf = await assets.audioBuffer('MUSIC', name);
       if (token !== this._musicToken) return;            // superseded by a newer request
       const src = this.ctx.createBufferSource();
-      src.buffer = buf; src.loop = true;
+      src.buffer = buf; src.loop = loop;
       src.connect(this.musicGain);
       src.start();
       this._music = src;

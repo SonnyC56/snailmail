@@ -145,6 +145,35 @@ export class Screens {
 
   _row(...els) { const r = document.createElement('div'); r.className = 'btn-row'; r.append(...els); return r; }
 
+  // ---- loading ----
+  /** The original full-screen LOADING art with an animated LOADINGBARON fill,
+   *  shown for a brief faithful beat on boot, then `onDone`. */
+  showLoading(onDone) {
+    const s = this._screen('loading-screen');
+    const wrap = document.createElement('div');
+    wrap.className = 'loading-wrap';
+    const art = document.createElement('img');
+    art.className = 'loading-art';
+    applyImage(art, 'SPRITES/LOADING');
+    const bar = document.createElement('div');
+    bar.className = 'loading-bar';
+    const fill = document.createElement('div');
+    fill.className = 'loading-bar-fill';
+    getSpriteURL('SPRITES/LOADINGBARON').then((u) => { if (u) fill.style.backgroundImage = `url(${u})`; });
+    bar.appendChild(fill);
+    wrap.append(art, bar);
+    s.appendChild(wrap);
+    const start = performance.now();
+    const DUR = 1100;
+    const tick = () => {
+      const e = Math.min(1, (performance.now() - start) / DUR);
+      fill.style.width = `${Math.round(e * 100)}%`;
+      if (e < 1) requestAnimationFrame(tick);
+      else onDone?.();
+    };
+    requestAnimationFrame(tick);
+  }
+
   // ---- title ----
   showTitle() {
     // The original SPLASH plate carries the full title art (Snail Mail logo +
@@ -159,6 +188,7 @@ export class Screens {
       this._btn('Play', () => this.cb.play?.()),
       this._btn('How to Play', () => this.showHelp(), 'secondary'),
       this._btn('Options', () => this.showOptions(), 'secondary'),
+      this._btn('Credits', () => this.showCredits(), 'secondary'),
     );
     inner.appendChild(menu);
 
@@ -356,16 +386,42 @@ export class Screens {
         </div>
       </div>
       <div class="crawl-skip-hint">click or press any key to skip</div>`;
+    // Prefer the original INTRO/INTRO.TXT loaded at runtime from the player's own
+    // staged game (it isn't redistributed in the repo); fall back to the text above.
+    this._loadOriginalText('INTRO/INTRO.TXT').then((paras) => {
+      const box = s.querySelector('.crawl-text');
+      if (box && paras && paras.length) {
+        box.innerHTML = `<div class="crawl-logo">SNAIL MAIL</div>` + paras.map((p) => `<p>${p}</p>`).join('');
+      }
+    });
+    this.audio.playMusic?.('crawl');     // the original INTROTEXT narration bed
     let done = false;
     const finish = () => {
       if (done) return; done = true;
       clearTimeout(this._crawlTimer);
       window.removeEventListener('keydown', finish);
+      this.audio.playMusic?.('menu');
       onDone();
     };
     this._crawlTimer = setTimeout(finish, 30000);
     s.addEventListener('click', finish);
     window.addEventListener('keydown', finish);
+  }
+
+  /** Fetch an original .TXT asset and return its prose lines (comments, blank
+   *  lines and Key:value directives stripped). Returns [] on any failure. */
+  async _loadOriginalText(path) {
+    try {
+      const res = await fetch(`/assets/${path}`);
+      if (!res.ok) return [];
+      const raw = await res.text();
+      return raw
+        .replace(/\/\*[^]*?\*\//g, '')          // block comments
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter((l) => l && !/^[A-Za-z][\w ]*:\s*\S/.test(l) && !/^[A-Za-z][\w ]*:$/.test(l))
+        .map((l) => l.replace(/[<>]/g, ''));     // strip stray angle brackets
+    } catch { return []; }
   }
 
   // ---- story interlude ----
@@ -522,6 +578,24 @@ export class Screens {
     `;
     inner.appendChild(panel);
     s.appendChild(this._row(this._btn('Got it!', () => this.showTitle())));
+  }
+
+  // ---- credits ----
+  showCredits() {
+    const s = this._screen('menu-screen');
+    const { inner } = this._stage(s, ART.menuA, ART.menuB, { cls: 'menu-stage' });
+    const panel = document.createElement('div');
+    panel.className = 'frame-panel';
+    panel.innerHTML = `<h2>Credits</h2>`;
+    const scroll = document.createElement('div');
+    scroll.className = 'credits-scroll';
+    scroll.innerHTML = `<p>Snail Mail &mdash; original game by Alpha72 Games / Sandlot Games (2004).</p><p>Web remaster: a fan project using the original assets.</p>`;
+    this._loadOriginalText('INTRO/CREDITS.TXT').then((lines) => {
+      if (lines && lines.length) scroll.innerHTML = lines.map((l) => `<p>${l}</p>`).join('');
+    });
+    panel.appendChild(scroll);
+    panel.appendChild(this._row(this._btn('Back', () => this.showTitle(), 'small secondary')));
+    inner.appendChild(panel);
   }
 
   hide() { this.clear(); }

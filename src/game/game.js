@@ -48,8 +48,11 @@ export class Game {
   }
 
   start() {
-    this.ctx.audio.playMusic('menu');
-    this.screens.showTitle();
+    // brief original LOADING screen on boot, then the title
+    this.screens.showLoading(() => {
+      this.ctx.audio.playMusic('menu');
+      this.screens.showTitle();
+    });
   }
 
   // ---- navigation --------------------------------------------------
