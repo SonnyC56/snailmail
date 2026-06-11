@@ -279,16 +279,20 @@ export class Player {
     this._tryFire(input);
     // hover a bit above the road
     this.h = moveToward(this.h, 2.6, 6 * dt);
-    this.jetFlame.visible = true;
+    // mount the original jetpack mesh; the procedural cone is only a fallback
+    this.snail.setJetpack?.(true);
+    this.jetFlame.visible = !this.snail.usingOriginal;
 
-    if (Math.abs(this.x) > this.track.halfWidth + 0.4) { this.jetFlame.visible = false; this._startFall(); return; }
+    if (Math.abs(this.x) > this.track.halfWidth + 0.4) { this._endJet(); this._startFall(); return; }
     if (this.jetTime <= 0) {
       // settle back down; if over a gap when it ends, fall
-      if (!this.track.hasSurface(this.s, this.x)) { this.jetFlame.visible = false; this._startFall(); return; }
+      if (!this.track.hasSurface(this.s, this.x)) { this._endJet(); this._startFall(); return; }
       this.h = moveToward(this.h, 0, 8 * dt);
-      if (this.h <= 0.05) { this.h = 0; this.state = PlayerState.RIDING; this.jetFlame.visible = false; this.onLand?.(); }
+      if (this.h <= 0.05) { this.h = 0; this.state = PlayerState.RIDING; this._endJet(); this.onLand?.(); }
     }
   }
+
+  _endJet() { this.jetFlame.visible = false; this.snail.setJetpack?.(false); }
 
   _startFall() {
     if (this.state === PlayerState.FALLING) return;
@@ -330,7 +334,10 @@ export class Player {
     this.shieldInvuln = 2.0;
     this.snail.group.rotation.set(0, 0, 0);
     this.jetFlame.visible = false;
+    this.snail.setJetpack?.(false);
     this._damagedTimer = 0;
+    this._deathPose = false;
+    this._lookbackPose = null;
     this.snail.setWeaponLevel?.(this.weaponLevel);  // back to single shooter
   }
 
@@ -391,8 +398,11 @@ export class Player {
     if (this.snail.setPose) {
       let pose = 'move';
       if (this._introPose) pose = 'talk';          // level-start "need for speed" intro
+      else if (this.state === PlayerState.FINISHED) pose = 'skid';  // screech to a stop at the mail stop
+      else if (this._deathPose) pose = 'shell';    // duck into shell on death
       else if (this.state === PlayerState.FALLING) pose = 'fall';
       else if (this._damagedTimer > 0) pose = 'damaged';
+      else if (this._lookbackPose) pose = this._lookbackPose;  // glance back (a racer is on your tail)
       else if (speedNorm < 0.08 && this.grounded) pose = 'base';
       else if (speedNorm > 0.85) pose = 'bob';   // faster scoot with head bob
       this.snail.setPose(pose);

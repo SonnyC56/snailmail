@@ -192,7 +192,17 @@ class OnlineSession {
       this.send({ t: 'pos', s: +level.player.s.toFixed(2), x: +level.player.x.toFixed(2), st: level.player.state, pr: +level.progress.toFixed(3) });
       this._progress[this.id] = level.progress;
     }
-    if (this.ghosts) this.ghosts.update(dt, level.time);
+    if (this.ghosts) {
+      this.ghosts.update(dt, level.time);
+      // glance back over the shell when a racer is right on your tail
+      const me = level.player;
+      let lookback = null;
+      for (const g of this.ghosts.ghosts.values()) {
+        const behind = me.s - g.s;          // >0 → ghost is behind me
+        if (behind > 0.5 && behind < 14) { lookback = (g.x < me.x) ? 'lookbackLeft' : 'lookbackRight'; break; }
+      }
+      me._lookbackPose = lookback;
+    }
   }
 
   onLocalFinish(summary) {

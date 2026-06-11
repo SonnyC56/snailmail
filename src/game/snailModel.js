@@ -53,6 +53,11 @@ const TURBO_ANIMS = {
   // the original "Intro Chatty Snail" animation (_ANIMATION.TXT: Duration 3.0,
   // Mode Once) — used in the level-start intro. 13 frames / 3.0s = 4.33 fps.
   talk:    { frames: ['TURBO-TALK-000', 'TURBO-TALK-001', 'TURBO-TALK-002', 'TURBO-TALK-003', 'TURBO-TALK-004', 'TURBO-TALK-005', 'TURBO-TALK-006', 'TURBO-TALK-007', 'TURBO-TALK-008', 'TURBO-TALK-009', 'TURBO-TALK-010', 'TURBO-TALK-011', 'TURBO-TALK-012'], mode: 'once', fps: 13 / 3 },
+  // finish-line screeching stop (_ANIMATION.TXT: Duration 2.0, Mode Once). 14 frames.
+  skid:    { frames: ['TURBO-SKIDSTOP-000', 'TURBO-SKIDSTOP-001', 'TURBO-SKIDSTOP-002', 'TURBO-SKIDSTOP-003', 'TURBO-SKIDSTOP-004', 'TURBO-SKIDSTOP-005', 'TURBO-SKIDSTOP-006', 'TURBO-SKIDSTOP-007', 'TURBO-SKIDSTOP-008', 'TURBO-SKIDSTOP-009', 'TURBO-SKIDSTOP-010', 'TURBO-SKIDSTOP-011', 'TURBO-SKIDSTOP-012', 'TURBO-SKIDSTOP-013'], mode: 'once', fps: 7 },
+  // glancing back over the shell (_ANIMATION.TXT: Duration 1.0, Mode Pingpong).
+  lookbackLeft:  { frames: ['TURBO-LOOKBACKLEFT-000', 'TURBO-LOOKBACKLEFT-001', 'TURBO-LOOKBACKLEFT-002', 'TURBO-LOOKBACKLEFT-003', 'TURBO-LOOKBACKLEFT-004'], mode: 'pingpong', fps: 8 },
+  lookbackRight: { frames: ['TURBO-LOOKBACKRIGHT-000', 'TURBO-LOOKBACKRIGHT-001', 'TURBO-LOOKBACKRIGHT-002', 'TURBO-LOOKBACKRIGHT-003', 'TURBO-LOOKBACKRIGHT-004'], mode: 'pingpong', fps: 8 },
 };
 
 // Which weapon mesh to mount per WEAPONS index (player.js WEAPONS array).
@@ -237,6 +242,11 @@ export function buildSnail(colors = SNAIL_COLORS) {
     weaponLevel: -1,
     weaponMeshes: [],        // currently mounted weapon meshes
     weaponMats: new Map(),   // texName -> material (so frames share)
+    jetpackOn: false,        // FLYING state mounts the original jetpack
+    jetpackReq: false,       // load requested (guards double-load)
+    jetpackMesh: null,       // JETPACK-BASE on Turbo's back
+    thrustMesh: null,        // JETPACKTHRUST flame (3-frame loop)
+    thrustGeos: [],
   };
 
   // collect every frame basename we need so we can preload geometries
@@ -317,6 +327,31 @@ export function buildSnail(colors = SNAIL_COLORS) {
     procWeapon.visible = !mounted;
   }
 
+  /** Stream + mount the original jetpack (pack on the back + a 3-frame looping
+   *  thrust flame). Authored in Turbo's local space, so it sits in `turbo`. */
+  async function loadJetpack() {
+    if (state.jetpackReq || !state.loaded) return;
+    state.jetpackReq = true;
+    try {
+      const baseGeo = await xloader.geometry('X', 'JETPACK-BASE-000');
+      const bTex = (baseGeo.userData.texture || 'JETPACK.TGA').replace(/\.[^.]+$/, '').toUpperCase();
+      state.jetpackMesh = new THREE.Mesh(baseGeo, new THREE.MeshLambertMaterial({ map: assets.texture(`X/${bTex}`), side: THREE.DoubleSide }));
+      state.jetpackMesh.visible = state.jetpackOn;
+      turbo.add(state.jetpackMesh);
+      for (const n of ['JETPACKTHRUST-BASE-000', 'JETPACKTHRUST-BASE-001', 'JETPACKTHRUST-BASE-002']) {
+        try { state.thrustGeos.push(await xloader.geometry('X', n)); } catch { /* skip */ }
+      }
+      if (state.thrustGeos.length) {
+        const tTex = (state.thrustGeos[0].userData.texture || 'JETPACKTHRUST.TGA').replace(/\.[^.]+$/, '').toUpperCase();
+        state.thrustMesh = new THREE.Mesh(state.thrustGeos[0], new THREE.MeshBasicMaterial({
+          map: assets.texture(`X/${tTex}`), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+        }));
+        state.thrustMesh.visible = state.jetpackOn;
+        turbo.add(state.thrustMesh);
+      }
+    } catch (err) { /* keep the procedural cone flame */ }
+  }
+
   function applyPoseFrame(frameIdx) {
     if (!state.loaded) return;
     const anim = TURBO_ANIMS[state.pose] || TURBO_ANIMS.base;
@@ -344,6 +379,13 @@ export function buildSnail(colors = SNAIL_COLORS) {
     },
     /** Mount the original weapon mesh for the given WEAPONS index. */
     setWeaponLevel(level) { mountWeapon(level); },
+    /** Show/hide the original jetpack (back pack + thrust flame) while flying. */
+    setJetpack(on) {
+      state.jetpackOn = on;
+      if (on) loadJetpack();
+      if (state.jetpackMesh) state.jetpackMesh.visible = on && state.loaded;
+      if (state.thrustMesh) state.thrustMesh.visible = on && state.loaded;
+    },
     get usingOriginal() { return state.loaded; },
     /**
      * Bouncy idle/ride animation. Drives both the procedural placeholder and
@@ -363,6 +405,11 @@ export function buildSnail(colors = SNAIL_COLORS) {
           ? Math.floor((t - state._poseStartT) * fps)
           : Math.floor(t * fps);
         applyPoseFrame(frameIdx);
+        // animate the jetpack thrust flame (3-frame loop) while flying
+        if (state.thrustMesh && state.thrustMesh.visible && state.thrustGeos.length) {
+          const ti = Math.floor(t * 12) % state.thrustGeos.length;
+          if (state.thrustMesh.geometry !== state.thrustGeos[ti]) state.thrustMesh.geometry = state.thrustGeos[ti];
+        }
         // subtle whole-body bob so motion reads even on a 2-frame swap
         const wiggle = Math.sin(t * 10) * 0.03 * (0.4 + speedNorm);
         turbo.position.y = grounded ? Math.max(0, wiggle) : 0;

@@ -254,6 +254,8 @@ export class Level {
     }
 
     this.lives--;
+    // duck-into-shell death pose for non-fall deaths (falling has its own pose)
+    if (cause !== 'fall') this.player._deathPose = true;
     this._emit('life', { lives: this.lives, cause });
     if (this.lives <= 0) {
       this.status = RunStatus.LOST;
