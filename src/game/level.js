@@ -201,7 +201,10 @@ export class Level {
       }
       return died;
     };
-    this.weapons.onImpactFx = (pos, kind) => this.fx.burst(pos, kind === 'rocket' ? 0xffaa33 : 0xfff1a0, 6, { speed: 4, life: 0.3 });
+    this.weapons.onImpactFx = (pos, kind) => {
+      this.fx.burst(pos, kind === 'rocket' ? 0xffaa33 : 0xfff1a0, 6, { speed: 4, life: 0.3 });
+      this.fx.flash(pos, 'COLLISION', { color: kind === 'rocket' ? 0xffbb55 : 0xffe9a0, size: 1.2, size1: 2.6, life: 0.22 });
+    };
   }
 
   _damage(amount, pos, color) {
@@ -401,6 +404,17 @@ export class Level {
     for (const e of this.entities.entities) {
       if (e.type === 'slug' && e.alive && !e._alerted && e.s > this.player.s && e.s - this.player.s < 35) {
         e._alerted = true; this.ctx.audio.slugVoice(['SLUG-SNAILALERT'], { gap: 4 }); break;
+      }
+    }
+
+    // STARTAIL boost trail while going postal / invincible / jetpacking
+    const P = this.player;
+    if (P.invincible || P.postal || P.jetTime > 0) {
+      this._trailT = (this._trailT ?? 0) - dt;
+      if (this._trailT <= 0) {
+        this._trailT = 0.05;
+        const pos = this.track.surfacePoint(Math.max(0, P.s - 1.2), P.x).addScaledVector(this.track.surfaceNormal(P.s), 0.8 + P.h);
+        this.fx.flash(pos, 'STARTAIL', { color: P.postal ? 0xff6a6a : 0xffe27a, size: 0.7, size1: 1.6, life: 0.35, spin: 6 });
       }
     }
 

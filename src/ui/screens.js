@@ -361,6 +361,13 @@ export class Screens {
       num.className = 'level-star-num';
       num.textContent = li + 1;
       star.append(ring, num);
+      // original LEVELSTAR badge marks a completed route
+      if (done) {
+        const badge = document.createElement('img');
+        badge.className = 'level-star-badge';
+        applyImage(badge, 'GALAXY/LEVELSTAR');
+        star.append(badge);
+      }
 
       if (lvUnlocked) {
         star.addEventListener('click', () => { this.audio.click(); this.cb.startLevel?.(gi, li); });

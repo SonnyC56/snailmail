@@ -55,6 +55,7 @@ export class HUD {
       <!-- DAMAGE / postal gauge: RIGHT side, vertical. Tube frame + fill bottom->top -->
       <div class="hud-gauge" id="hud-gauge" title="Postal meter">
         <div class="hud-gauge-frame" id="hud-gauge-frame"></div>
+        <div class="hud-warning" id="hud-warning"></div>
         <div class="hud-gauge-fill-clip" id="hud-gauge-clip">
           <div class="hud-gauge-fill" id="hud-gauge-fill"></div>
         </div>
@@ -77,6 +78,7 @@ export class HUD {
       gaugeFrame: root.querySelector('#hud-gauge-frame'),
       gaugeClip: root.querySelector('#hud-gauge-clip'),
       gaugeFill: root.querySelector('#hud-gauge-fill'),
+      warning: root.querySelector('#hud-warning'),
       score: root.querySelector('#hud-score'),
       weapon: root.querySelector('#hud-weapon'),
       timer: root.querySelector('#hud-timer'),
@@ -109,7 +111,12 @@ export class HUD {
       this.el.gauge.classList.add('has-sprite');
     });
     getSpriteURL('SPRITES/DAMAGEGUAGEFULL').then((url) => {
-      if (url) this.el.gaugeFill.style.backgroundImage = `url(${url})`;
+      if (url) { this._fillNormal = `url(${url})`; this.el.gaugeFill.style.backgroundImage = this._fillNormal; }
+    });
+    // brighter fill + warning icon for the danger band (postal meter near full)
+    getSpriteURL('SPRITES/DAMAGEGUAGEBRIGHT').then((url) => { if (url) this._fillBright = `url(${url})`; });
+    getSpriteURL('SPRITES/WARNING').then((url) => {
+      if (url) this.el.warning.style.backgroundImage = `url(${url})`;
     });
 
     // LEFT: vertical progress indicator — track, lit fill, climbing cursor.
@@ -171,7 +178,12 @@ export class HUD {
     const ratio = Math.max(0, Math.min(1, s.meter));
     const m = Math.round(ratio * 100);
     this.el.gaugeClip.style.height = `${(ratio * 100).toFixed(1)}%`;
-    this.el.gauge.classList.toggle('danger', ratio > 0.75);
+    const danger = ratio > 0.75;
+    if (danger !== this._danger) {
+      this._danger = danger;
+      this.el.gauge.classList.toggle('danger', danger);
+      if (this._fillBright) this.el.gaugeFill.style.backgroundImage = danger ? this._fillBright : (this._fillNormal || '');
+    }
     // CSS fallback bar (visible only if the gauge sprite never loaded).
     this.el.meter.style.height = `${m}%`;
     this.el.meter.style.background = m > 75

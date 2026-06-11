@@ -182,6 +182,15 @@ html, body {
 .hud-gauge.danger .hud-gauge-fill { animation: gauge-flash 0.45s steps(2) infinite; }
 @keyframes gauge-flash { 0% { filter: none; } 100% { filter: brightness(1.5) saturate(1.4); } }
 
+/* WARNING icon above the gauge — shown only in the danger band */
+.hud-warning {
+  position: absolute; top: -34px; left: 50%; transform: translateX(-50%);
+  width: 30px; height: 30px; background-size: contain; background-repeat: no-repeat; background-position: center;
+  opacity: 0; pointer-events: none; transition: opacity 0.12s;
+}
+.hud-gauge.danger .hud-warning { opacity: 1; animation: warn-blink 0.5s steps(2) infinite; }
+@keyframes warn-blink { 0% { opacity: 1; } 100% { opacity: 0.25; } }
+
 /* CSS fallback bar — only visible while the gauge sprite hasn't loaded.
    Vertical, sitting just left of the frame, filling bottom->top. */
 .hud-meter.fallback {
@@ -715,6 +724,12 @@ html, body {
   transition: transform 0.1s ease, filter 0.1s ease;
 }
 .level-star:not(.locked):hover { transform: scale(1.12); }
+.level-star-badge {
+  position: absolute; top: -6px; right: -6px;
+  width: 20px; height: 20px; object-fit: contain;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.6));
+  pointer-events: none;
+}
 .level-star-ring {
   position: absolute; inset: 0;
   width: 100%; height: 100%;
