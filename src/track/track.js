@@ -28,7 +28,15 @@ import { assets } from '../assets.js';
 const SAMPLE_STEP = 1.0;     // frame sample spacing along s
 const RING_STEP = 2.0;       // mesh ring spacing along s
 const LANE_LINES = 4;        // painted lane divisions
-const LOOP_LIFT = 6.0;       // extra apex height on loops so a jump arc can't skim the top
+
+// Recovered loop geometry (tools/re/curve_formulas.json, emulated LOOPTHELOOP):
+// the vertical circle has radius ~5.88 so its apex sits ~11.76 above grade
+// (apex == 2*radius). The circle is a FIXED size centred in the loop segment;
+// the rest of the segment is straight lead-in/out — exactly as the original
+// (7 lead-in points + circle + 7 lead-out). Apex height is therefore independent
+// of how long the authored loop segment grid is.
+const LOOP_RADIUS = 5.88;          // recovered vertical-loop radius (apex ~11.76)
+const LOOP_BOW = 2.5;              // recovered lateral X drift across the loop (±2.5)
 
 // grid lane geometry (matches segments.js colToX: 8 lanes across ±5)
 const GRID_COLS = 8;
@@ -62,13 +70,24 @@ function smoothBump(u) {
   const s = Math.sin(PI * u);
   return s * s;
 }
-// Windowed S-wave: `cycles` full sine cycles across the feature, windowed by
-// smoothBump so the value AND its rate vanish at both ends (no boundary kinks)
-// and the net integral is zero (returns to the baseline heading/grade, no
-// drift). cycles=1 is a single up/down (hill, valley); higher counts weave more
-// (long slaloms). Any whole number of cycles keeps the net integral at zero.
-function smoothSWave(u, cycles = 1) {
-  return Math.sin(cycles * TWO_PI * u) * smoothBump(u);
+// Raised-cosine bump in canonical form: 0 at the ends, +1 at the centre, with
+// zero VALUE and zero RATE at both ends. This is the original's recovered hill /
+// valley vertical profile, (0.5 - 0.5*cos(2*pi*u)) == sin^2(pi*u) == smoothBump.
+const raisedCos = smoothBump;
+// Triangular taper window (the recovered slalom window): 1 at the centre, ramps
+// linearly to 0 at both ends. Multiplying a whole-cycle sine by this gives the
+// original's windowed weave whose offset vanishes at the boundaries. (The sine
+// already provides a zero crossing with bounded slope at the ends, so the
+// product meets the baseline without a position kink.)
+function triWindow(u) {
+  return 1 - Math.abs(2 * u - 1);
+}
+// Windowed sine weave with the recovered TRIANGULAR window (slalom / corkscrew
+// lateral helix). `cycles` whole sine cycles across the feature; the triangular
+// taper drives the offset to zero at u=0,1 so the shaped centerline rejoins the
+// baseline. Net integral over whole cycles is ~zero (no lateral drift).
+function windowedSine(u, cycles = 1) {
+  return Math.sin(cycles * TWO_PI * u) * triWindow(u);
 }
 
 export class Track {
@@ -140,65 +159,93 @@ export class Track {
     // No authored 3D features → use the baseline directly (flat + procedural).
     if (!paths.length) { this.curve = baseCurve; this.length = baseLen; return; }
 
-    // 2) Fine walk that bulges the spline into the real 3D shapes within each
-    // path range. Every step advances the same arc, so the TOTAL arc length is
-    // preserved (the grid road / entities placed at s = row*rowUnits stay
-    // aligned) — a loop just consumes its segment's arc as a vertical circle
-    // instead of a forward run.
+    // 2) Fine walk that bends the spline into the REVERSE-ENGINEERED exact 3D
+    // shapes within each path range (tools/re/curve_formulas.json). The original
+    // factories write control-point POSITION directly, so here every non-loop
+    // family is applied as a DIRECT centerline offset measured in the baseline's
+    // own frame (lateral along `side`, vertical along `up`) — not as a yaw/pitch
+    // integration. The walk still advances the baseline tangent by a fixed `step`
+    // each iteration, so the TOTAL arc length is preserved (the grid road /
+    // entities placed at s = row*rowUnits stay aligned). A LOOP is the one shape
+    // that genuinely inverts and doubles back, so it alone rotates the heading
+    // through a full vertical circle, consuming arc as a circle instead of a
+    // forward run — exactly as the recovered LOOPTHELOOP does.
     const step = 3.0;
     const nF = Math.max(2, Math.ceil(baseLen / step));
     const pts = [];
-    const cur = baseCurve.getPointAt(0).clone();
+    const cur = baseCurve.getPointAt(0).clone();   // integrated baseline position
     pts.push(cur.clone());
     const tmp = new THREE.Vector3();
+    const worldUp = new THREE.Vector3(0, 1, 0);
+    const side = new THREE.Vector3();
+    const upv = new THREE.Vector3();
+    let loopPitch = 0;                              // accumulated loop revolution (radians)
     for (let i = 1; i <= nF; i++) {
       const s = i * step;
       const u0 = Math.min(s / baseLen, 1);
       const tan = baseCurve.getTangentAt(u0, tmp).normalize();
-      let by = Math.atan2(tan.x, -tan.z);          // baseline yaw
-      let bp = Math.asin(clamp(tan.y, -1, 1));      // baseline pitch
-      let liftY = 0;
+      const by = Math.atan2(tan.x, -tan.z);         // baseline yaw
+      const bp = Math.asin(clamp(tan.y, -1, 1));    // baseline pitch
+      // baseline frame: side = horizontal perpendicular, up = frame up
+      side.set(Math.cos(by), 0, Math.sin(by));      // right of travel (horizontal)
+      upv.crossVectors(side, tan).normalize();      // up perpendicular to tangent
+      if (upv.lengthSq() < 1e-6) upv.copy(worldUp);
+
       const pf = paths.find((p) => s >= p.at && s < p.at + p.len);
+      let offX = 0, offY = 0;                        // direct lateral / vertical offset
+      let pitchAdd = 0;                              // extra heading pitch (loop only)
       if (pf) {
         const u = (s - pf.at) / pf.len;             // 0..1 through the feature
+        const amp = pf.amp ?? 0, cycles = pf.cycles ?? 1, dir = pf.dir ?? 1;
         if (pf.family === 'loop') {
-          // Full vertical loop: ramp a clean 2*pi of extra pitch via a 5th-order
-          // smoothstep, so the road rises, inverts, and returns to grade with the
-          // pitch RATE easing from/to zero at the boundaries (C1-continuous, no
-          // kink). At u=1 the added pitch is exactly 2*pi -> the heading wraps
-          // back to the entry grade, no leftover tilt.
-          bp += TWO_PI * smootherStep(u);
-          // Bow the loop sideways so it advances laterally instead of stacking a
-          // circle back over its own entry/exit (a self-overlapping in-place
-          // loop). The bow is a single smooth lobe: zero offset and zero rate at
-          // both ends, peak in the middle. Direction alternates deterministically
-          // per loop so successive loops lean to opposite sides.
-          const bowDir = (Math.floor(pf.at / 11) % 2) ? 1 : -1;
-          by += bowDir * 0.9 * smoothBump(u);
-          // Raise the whole loop so its apex sits well above a normal jump arc —
-          // you ride THROUGH the loop to grab its upgrade instead of skimming
-          // over the top. smoothBump keeps the lift C1 (zero value & rate at the
-          // entry/exit, peak at the apex), so the road still meets grade cleanly.
-          liftY = LOOP_LIFT * smoothBump(u);
-        }
-        // Hills/valleys: a smooth vertical arc that climbs (or dips) then returns
-        // exactly to grade. The windowed S-wave gives net-zero pitch integral
-        // (height returns to baseline) with zero rate at the ends.
-        else if (pf.family === 'hill') bp += 0.75 * smoothSWave(u);
-        else if (pf.family === 'valley') bp -= 0.75 * smoothSWave(u);
-        // Slalom: a smooth alternating lateral S in yaw — net-zero heading
-        // change, no kink at entry/exit. Longer features weave through more
-        // cycles (~one full S per 90 units) so a short chicane reads as a single
-        // swerve while a long slalom snakes; always a whole number of cycles so
-        // the heading still returns exactly to baseline.
-        else if (pf.family === 'slalom') {
-          const cycles = Math.max(1, Math.round(pf.len / 90));
-          by += 0.6 * smoothSWave(u, cycles);
+          // Recovered vertical loop: a FIXED-radius circle (apex ~2*radius ~11.76)
+          // centred in the segment, straight lead-in/out around it. We rotate the
+          // heading by 2*pi across just the circle's arc (length 2*pi*R) so the
+          // road rises, inverts and returns to grade; the rest of the feature is
+          // straight. LOOPOUT (dir=-1) rotates the other way to dip BELOW grade.
+          // Radius is shrunk only if the segment is too short to hold a full loop.
+          let R = LOOP_RADIUS;
+          const circLen = TWO_PI * R;
+          if (circLen > pf.len * 0.92) { R = (pf.len * 0.92) / TWO_PI; }
+          const cl = TWO_PI * R;                     // actual circle arc length
+          const c0 = pf.at + (pf.len - cl) / 2;      // circle window (centred)
+          const c1 = c0 + cl;
+          if (s > c0 && s <= c1) loopPitch += dir * (TWO_PI / cl) * step;
+          else if (s > c1) loopPitch = Math.round(loopPitch / TWO_PI) * TWO_PI; // snap to clean revolution (no residual tilt)
+          pitchAdd = loopPitch;
+          // Lateral bow ±LOOP_BOW: the recovered X drift (-2.5..+2.5) that keeps
+          // the loop from self-intersecting. Linear across the circle, tapered at
+          // the feature ends so the centerline meets the baseline (C1).
+          const bow = (clamp((s - c0) / cl, 0, 1) * 2 - 1) * LOOP_BOW;
+          offX = bow * smoothBump(u);
+        } else if (pf.family === 'hill') {
+          // Raised-cosine vertical bump: Y += (0.5-0.5cos2piu)*amp, returns to grade.
+          offY = raisedCos(u) * amp;
+        } else if (pf.family === 'valley') {
+          // Negated bump: a dip.
+          offY = -raisedCos(u) * amp;
+        } else if (pf.family === 'slalom') {
+          // Direct lateral weave: amp*sin(cycles*2piu) windowed (triangular taper).
+          offX = amp * windowedSine(u, cycles);
+        } else if (pf.family === 'corkscrew') {
+          // Lateral helix offset (the spin itself is a runtime roll). Small windowed
+          // oscillation so the centerline returns to grade at the ends (C1).
+          offX = amp * windowedSine(u, cycles);
+        } else if (pf.family === 'invert') {
+          // Vertical arc (TURNOVER ~4.7 up, TURNUNDER under); the inversion is the
+          // runtime roll. A single raised-cosine arc so it returns to grade.
+          offY = dir * raisedCos(u) * amp;
         }
       }
-      const dir = new THREE.Vector3(Math.sin(by) * Math.cos(bp), Math.sin(bp), -Math.cos(by) * Math.cos(bp));
-      cur.addScaledVector(dir, step);
-      const p = cur.clone(); p.y += liftY; pts.push(p);
+      // advance the integrated baseline position by one step of heading
+      const hy = by;
+      const hp = bp + pitchAdd;
+      const dir3 = new THREE.Vector3(
+        Math.sin(hy) * Math.cos(hp), Math.sin(hp), -Math.cos(hy) * Math.cos(hp));
+      cur.addScaledVector(dir3, step);
+      // store the baseline position plus the direct perpendicular offset
+      const p = cur.clone().addScaledVector(side, offX).addScaledVector(upv, offY);
+      pts.push(p);
     }
     this.curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal', 0.5);
     this.curve.arcLengthDivisions = pts.length * 12;

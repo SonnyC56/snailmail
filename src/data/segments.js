@@ -50,9 +50,12 @@ const BOOST = new Set(['J', '(']);          // jump-pad / trampoline (drivable l
 
 // The original encoded a 3D track shape per path segment as `Path=<Type>` (50+
 // named curves: LoopTheLoop, HalfPipe, SCREW, Twister, Invert, Hill, Valley...).
-// The exact curves lived in the engine; we reconstruct each by FAMILY: spline
-// pitch/yaw shaping for loop/hill/valley/slalom, and tangent-roll for
-// corkscrew/invert/halfpipe (reusing Track's existing roll system).
+// These are now reconstructed from the REVERSE-ENGINEERED exact shapes recovered
+// by emulating the original's per-curve factory functions (see
+// tools/re/curve_formulas.json). Each curve maps to a FAMILY plus the recovered
+// per-curve magnitudes (amplitude, cycle/twist count, direction). Track._buildPath
+// applies those as DIRECT centerline offsets (the original writes control-point
+// POSITION directly); corkscrew/invert/halfpipe additionally carry a runtime roll.
 function pathTypeOf(seg) {
   for (const row of (seg.rows || [])) { const m = row.match(/Path=(\S+)/i); if (m) return m[1]; }
   return null;
@@ -69,16 +72,69 @@ function pathFamily(type) {
   if (/slalom|snake|sweep|wibble/.test(t)) return 'slalom';
   return 'flat';   // toad/supertramp/worm/warp/start/P0-2 → keep continuous road
 }
-/** Record a path segment as a spline feature and/or a roll feature.
+
+/**
+ * Recovered per-curve geometry parameters (from tools/re/curve_formulas.json
+ * `families_for_track_js`). Returns { family, amp, cycles, dir } consumed by
+ * Track._buildPath as direct centerline offsets:
+ *   - loop    : amp = lateral bow (±2.5); dir = +1 (rises) / -1 (LOOPOUT dips below)
+ *   - hill    : amp = raised-cosine bump height (0.35)
+ *   - valley  : amp = dip depth (0.35)
+ *   - slalom  : amp = lateral sine amplitude (5.0 SLALOM, 4.44 SLALOMBIG/DOUBLE,
+ *               2.0 SWEEP/SNAKE/WIBBLE); cycles = sine cycles (1, or 2 for DOUBLE)
+ *   - corkscrew: amp = lateral helix amplitude (0.5 SCREW, 2.5 TWISTER);
+ *               cycles = twists (1 SCREW/TWISTERA, 2 TWISTER2*)
+ *   - invert  : amp = vertical arc height (4.7 TURNOVER family, 0 for INVERT which
+ *               is a pure runtime inversion); dir = +1 (over) / -1 (TURNUNDER under)
+ */
+function pathParams(type) {
+  const family = pathFamily(type);
+  const t = (type || '').toLowerCase();
+  switch (family) {
+    case 'loop':
+      // LOOPOUT ("Outer Loop") dips BELOW grade; all others rise to apex ~2×radius.
+      return { family, amp: 2.5, cycles: 1, dir: /loopout/.test(t) ? -1 : 1 };
+    case 'hill':
+      return { family, amp: 0.35, cycles: 1, dir: 1 };
+    case 'valley':
+      return { family, amp: 0.35, cycles: 1, dir: 1 };
+    case 'slalom': {
+      let amp = 5.0, cycles = 1;
+      if (/slalomdouble/.test(t)) { amp = 40 / 9; cycles = 2; }
+      else if (/slalombig/.test(t)) { amp = 40 / 9; cycles = 1; }
+      else if (/sweep|snake|wibble/.test(t)) { amp = 2.0; cycles = 1; }
+      else { amp = 5.0; cycles = 1; }            // SLALOM
+      return { family, amp, cycles, dir: 1 };
+    }
+    case 'corkscrew': {
+      const amp = /twister/.test(t) ? 2.5 : 0.5;   // TWISTER* = 2.5, SCREW = 0.5
+      const cycles = /twister2/.test(t) ? 2 : 1;   // TWISTER2* = double corkscrew
+      return { family, amp, cycles, dir: 1 };
+    }
+    case 'invert': {
+      if (/^invert$|cage/.test(t)) return { family, amp: 0, cycles: 1, dir: 1 }; // pure roll
+      const dir = /turnunder/.test(t) ? -1 : 1;          // TURNUNDER goes under grade
+      const cycles = /double/.test(t) ? 2 : 1;
+      return { family, amp: 4.7, cycles, dir };
+    }
+    default:
+      return { family, amp: 0, cycles: 1, dir: 1 };
+  }
+}
+/** Record a path segment as a centerline geometry feature and/or a roll feature.
  *
- *  Roll features bank the flat ribbon about its own tangent via Track._rollAt
- *  rather than bending the spline:
- *   - corkscrew → a CONTINUOUS full twist (cork:true): the road spirals over and
- *     lands upright at the exit.
- *   - invert    → also a continuous roll (cork:true): a turnover that rolls
- *     through inversion and returns upright over the feature length.
- *   - halfpipe  → a there-and-back BANK (cork:false): rolls up to ~52° at the
- *     midpoint then settles smoothly back to flat (a U-shaped wall transition).
+ *  The geometry (loop / hill / valley / slalom / corkscrew helix / invert arc)
+ *  is emitted as a `paths` entry { at, len, family, amp, cycles, dir } carrying
+ *  the RECOVERED per-curve magnitudes; Track._buildPath applies it as a direct
+ *  centerline offset. On top of that, banking/inversion is a RUNTIME roll about
+ *  the tangent via Track._rollAt:
+ *   - corkscrew → a CONTINUOUS full twist (cork:true) AND a small lateral helix
+ *     centerline offset: the road spirals over and lands upright at the exit.
+ *   - invert    → a CONTINUOUS roll (cork:true) over a vertical arc (TURNOVER
+ *     family) — a turnover that rolls through inversion and returns upright.
+ *   - halfpipe  → a there-and-back BANK (cork:false) of ~52° at the midpoint then
+ *     settles smoothly back to flat (the U-shaped wall transition; straight
+ *     centerline).
  *   - worm      → a continuous corkscrew (cork:true) ONLY when authored — the
  *     base "flat" family carries no roll, the per-instance Angle= drives it.
  *   - wibble    → in addition to its slalom spline, an authored Angle= adds a
@@ -89,17 +145,28 @@ function pathFamily(type) {
  *  `angle` is the ORIGINAL per-instance roll magnitude in degrees (already
  *  signed) baked from the segment's Angle= annotation, or null/undefined when
  *  unannotated. When present it OVERRIDES the deg/sign heuristic with the
- *  authored value (its sign too); the path-shaping `{at,len,family}` is
- *  unchanged. When absent we fall back to the position-derived heuristic so
- *  every client still rebuilds the identical track. */
-function addPathFeature(paths, rolls, fam, at, len, angle) {
+ *  authored value (its sign too); the recovered centerline geometry is unchanged.
+ *  When absent we fall back to the position-derived heuristic so every client
+ *  still rebuilds the identical track. */
+function addPathFeature(paths, rolls, type, at, len, angle) {
+  const p = pathParams(type);
+  const fam = p.family;
   const sign = (Math.floor(at / 7) % 2) ? 1 : -1;
   const authored = Number.isFinite(angle);
-  if (fam === 'corkscrew') rolls.push({ at, len, deg: authored ? angle : sign * 360, cork: true });
-  else if (fam === 'invert') rolls.push({ at, len, deg: authored ? angle : sign * 360, cork: true });
-  else if (fam === 'halfpipe') rolls.push({ at, len, deg: authored ? angle : sign * 52, cork: false });
-  else if (fam === 'loop' || fam === 'hill' || fam === 'valley' || fam === 'slalom') {
-    paths.push({ at, len, family: fam });
+  const feature = { at, len, family: fam, amp: p.amp, cycles: p.cycles, dir: p.dir };
+  if (fam === 'corkscrew') {
+    paths.push(feature);                                   // lateral helix centerline
+    rolls.push({ at, len, deg: authored ? angle : sign * 360, cork: true });
+  } else if (fam === 'invert') {
+    paths.push(feature);                                   // vertical arc centerline
+    // INVERT spins a full 360°; TURNOVER banks 180° there-and-back (returns upright).
+    const cork = /^invert$|cage/.test((type || '').toLowerCase());
+    const deg = authored ? angle : (cork ? sign * 360 : sign * 180);
+    rolls.push({ at, len, deg, cork });
+  } else if (fam === 'halfpipe') {
+    rolls.push({ at, len, deg: authored ? angle : sign * 52, cork: false });
+  } else if (fam === 'loop' || fam === 'hill' || fam === 'valley' || fam === 'slalom') {
+    paths.push(feature);
     // An angled slalom (Wibble) leans into its sweep: add a banked roll on top
     // of the spline shape, using the authored magnitude+sign.
     if (authored) rolls.push({ at, len, deg: angle, cork: false });
@@ -364,7 +431,7 @@ export function buildLevelLayout(meta) {
     // over them (fill as road) instead of launching. Only real chasms become
     // fall gaps + jump pads. Path segments carry no fall gaps at all.
     let rampRows = null;
-    if (isPath) addPathFeature(paths, rolls, pathFamily(pathTypeOf(seg)), offset, seg.length, angle);
+    if (isPath) addPathFeature(paths, rolls, pathTypeOf(seg), offset, seg.length, angle);
     else {
       const { chasms, rampRows: rr } = classifyGaps(seg.gaps);
       rampRows = rr;
