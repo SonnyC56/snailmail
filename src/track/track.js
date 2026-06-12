@@ -408,6 +408,8 @@ export class Track {
     group.add(road);
     const apron = this._buildStartApron();   // lead-in behind start + run-out past finish
     if (apron) group.add(apron);
+    const slide = this._buildSlideEdges(theme);   // original yellow/red chevron road edge
+    if (slide) group.add(slide);
     group.add(this._buildEdges(theme));
     const warnings = this._buildGapWarnings(theme);
     if (warnings) group.add(warnings);
@@ -640,6 +642,49 @@ export class Track {
     };
     group.add(strip(0, -1));            // lead-in behind the start
     group.add(strip(this.length, 1));   // run-out past the finish
+    return group;
+  }
+
+  /** The original yellow/red chevron road-EDGE texture (Slide0..3): a band along
+   *  each drivable edge, textured with the level's slide skin, so the road reads
+   *  with the original's hazard-chevron edges. Follows the per-row drivable extent
+   *  and breaks at gaps. Self-illuminated like the road so it stays bright. */
+  _buildSlideEdges(theme) {
+    if (!theme.slideTex) return null;
+    const tex = assets.texture(theme.slideTex, { wrap: true });
+    const mat = new THREE.MeshLambertMaterial({
+      map: tex, side: THREE.DoubleSide,
+      emissiveMap: tex, emissive: new THREE.Color(0xffffff), emissiveIntensity: 0.5,
+    });
+    const group = new THREE.Group();
+    const EW = 1.1;            // width of the chevron edge band
+    for (const which of ['min', 'max']) {
+      const positions = [], uvs = [], indices = [];
+      let prev = false;
+      for (let s = 0; s <= this.length; s += RING_STEP) {
+        const ext = this.drivableExtent(s);
+        if (!ext) { prev = false; continue; }
+        const fr = this.frameAt(s);
+        const edge = which === 'min' ? ext.min : ext.max;
+        const inner = which === 'min' ? edge + EW : edge - EW;
+        const pe = fr.pos.clone().addScaledVector(fr.side, edge).addScaledVector(fr.up, 0.02);
+        const pi = fr.pos.clone().addScaledVector(fr.side, inner).addScaledVector(fr.up, 0.02);
+        const bi = positions.length / 3;
+        positions.push(pi.x, pi.y, pi.z, pe.x, pe.y, pe.z);
+        const v = s * 0.2;     // chevrons repeat along the edge
+        uvs.push(v, 0, v, 1);
+        if (prev) indices.push(bi - 2, bi - 1, bi, bi - 1, bi + 1, bi);
+        prev = true;
+      }
+      if (positions.length) {
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+        geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+        geo.setIndex(indices);
+        geo.computeVertexNormals();
+        group.add(new THREE.Mesh(geo, mat));
+      }
+    }
     return group;
   }
 

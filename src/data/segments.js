@@ -263,6 +263,7 @@ export function parseSegment(textOrParsed) {
     let hasBoost = false;
     let hasPath = false;
     let ringCells = 0;                       // a '>'/'<'/'R' row spans the road
+    const jumpCols = [];                     // columns of J/( jump glyphs in this row
 
     for (let c = 0; c < body.length; c++) {
       const ch = body[c];
@@ -278,7 +279,7 @@ export function parseSegment(textOrParsed) {
       if (type === 'ring') {
         ringCells++;                        // collapse a full ring row into ONE ring below
       } else if (type === 'jumppod') {
-        objects.push({ type: 'jumppod', s, x: 0 });
+        jumpCols.push(c);                   // placed below, centred on the glyph run
         hasBoost = true;
       } else if (type === 'pillar') {
         // grid pillars come only from '|' fence posts — tag them so a fence row
@@ -287,6 +288,13 @@ export function parseSegment(textOrParsed) {
       } else {
         objects.push({ type, s, x });
       }
+    }
+
+    // Place one jump pad CENTRED on the row's J/( glyphs — the original positions
+    // jumps at specific lanes (left/centre/right), not always dead centre.
+    if (jumpCols.length) {
+      const cmid = (jumpCols[0] + jumpCols[jumpCols.length - 1]) / 2;
+      objects.push({ type: 'jumppod', s, x: colToX(cmid) });
     }
 
     // A ring row is one gate spanning the road: emit a single centred ring,
