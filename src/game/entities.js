@@ -319,28 +319,48 @@ function buildJumpPod() {
 // "roll up and over" ramp doesn't read as a jump pad.
 function buildRamp() {
   const g = new THREE.Group();
-  const W = 1.5, back = 1.2, front = -1.2, hi = 0.6;
-  // inclined ramp surface (back-low -> front-high)
+  const W = 1.6;            // half width (road-like)
+  const LEN = 1.8;          // SHORTER than before (was 2.4)
+  const HI = 0.62;
+  const N = 6;              // subdivisions for the curved profile
+  const back = LEN / 2, front = -LEN / 2;   // forward = local -Z
+  // Height rises with u^2 so the ramp is gentle at its base and STEEPER toward
+  // the launch end. Surface uses the original ROAD texture so it reads as the
+  // road kicking up, not a grey wedge.
+  const heightAt = (u) => 0.03 + HI * (u * u);
+  const tex = assets.texture('OBJECTS/WORLD00/TRACK0', { wrap: true });
+  const surfMat = new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide });
+  const pos = [], uv = [], idx = [];
+  for (let i = 0; i <= N; i++) {
+    const u = i / N, z = back - u * LEN, y = heightAt(u);
+    const bi = pos.length / 3;
+    pos.push(-W, y, z, W, y, z);
+    uv.push(0, u, 1, u);
+    if (i > 0) idx.push(bi - 2, bi - 1, bi, bi - 1, bi + 1, bi);
+  }
   const surf = new THREE.BufferGeometry();
-  surf.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
-    -W, 0.04, back, W, 0.04, back, W, hi, front,
-    -W, 0.04, back, W, hi, front, -W, hi, front,
-  ]), 3));
-  surf.computeVertexNormals();
-  g.add(new THREE.Mesh(surf, mat(0x8b94a6, { emissive: 0x29313f, emissiveIntensity: 0.45, side: THREE.DoubleSide })));
-  // triangular side walls so it reads as a solid wedge
-  const sideGeo = new THREE.BufferGeometry();
-  sideGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
-    0, 0.04, back, 0, 0.04, front, 0, hi, front,
-  ]), 3));
-  sideGeo.computeVertexNormals();
-  const sideMat = mat(0x6a7486, { side: THREE.DoubleSide });
-  const sL = new THREE.Mesh(sideGeo, sideMat); sL.position.x = -W;
-  const sR = new THREE.Mesh(sideGeo, sideMat); sR.position.x = W;
-  g.add(sL, sR);
-  // yellow leading lip for a "launch here" read
-  const lip = new THREE.Mesh(new THREE.BoxGeometry(2 * W + 0.1, 0.14, 0.2), basic(0xffd24d));
-  lip.position.set(0, hi, front);
+  surf.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  surf.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  surf.setIndex(idx); surf.computeVertexNormals();
+  g.add(new THREE.Mesh(surf, surfMat));
+  // dark side fills following the curved profile so it reads solid from the side
+  const sideMat = mat(0x44505e, { side: THREE.DoubleSide });
+  for (const sx of [-W, W]) {
+    const sp = [], si = [];
+    for (let i = 0; i <= N; i++) {
+      const u = i / N, z = back - u * LEN;
+      const bi = sp.length / 3;
+      sp.push(sx, 0.0, z, sx, heightAt(u), z);
+      if (i > 0) si.push(bi - 2, bi - 1, bi, bi - 1, bi + 1, bi);
+    }
+    const sg = new THREE.BufferGeometry();
+    sg.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3));
+    sg.setIndex(si); sg.computeVertexNormals();
+    g.add(new THREE.Mesh(sg, sideMat));
+  }
+  // yellow leading lip at the steep front edge ("launch here")
+  const lip = new THREE.Mesh(new THREE.BoxGeometry(2 * W + 0.08, 0.12, 0.14), basic(0xffd24d));
+  lip.position.set(0, heightAt(1), front);
   g.add(lip);
   return g;
 }

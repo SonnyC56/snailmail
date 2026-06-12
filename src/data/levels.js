@@ -211,7 +211,10 @@ export function trackDefForLevel(level) {
     .sort((a, b) => a.at - b.at);
   for (const g of raw) {
     const prev = def.gaps[def.gaps.length - 1];
-    if (prev && g.at <= prev.at + prev.len + 1.5) {
+    // merge gaps split by only a thin (<= ~1 grid row) road strip into ONE gap,
+    // so a "double jump" with a tiny un-landable strip between (e.g. the tutorial's
+    // 5-row + 4-row gaps split by a single row) becomes one clearable launch.
+    if (prev && g.at <= prev.at + prev.len + (ROW_UNITS + 0.6)) {
       prev.len = Math.max(prev.len, g.at + g.len - prev.at);
       prev.construction = prev.construction || g.construction;
     } else {
