@@ -514,9 +514,12 @@ export class Track {
     if (theme.trackTex) {
       const tex = assets.texture(theme.trackTex, { wrap: true });
       tex.repeat.set(1, 1);
-      mat = new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide, emissive: new THREE.Color(theme.surface), emissiveIntensity: 0.16 });
+      // Self-illuminate the road with its OWN texture (emissiveMap) so the main
+      // pathway stays bright and EVENLY lit as it banks/curves — tilted normals
+      // were leaving it dark versus the flat start apron (which shares this mat).
+      mat = new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide, emissiveMap: tex, emissive: new THREE.Color(0xffffff), emissiveIntensity: 0.55 });
     } else {
-      mat = new THREE.MeshLambertMaterial({ color: theme.surface, side: THREE.DoubleSide });
+      mat = new THREE.MeshLambertMaterial({ color: theme.surface, side: THREE.DoubleSide, emissive: new THREE.Color(theme.surface), emissiveIntensity: 0.4 });
     }
     return new THREE.Mesh(geo, mat);
   }
@@ -597,7 +600,7 @@ export class Track {
       tex.repeat.set(1, 1);
       mat = new THREE.MeshLambertMaterial({
         map: tex, side: THREE.DoubleSide,
-        emissive: new THREE.Color(theme.surface), emissiveIntensity: 0.16,
+        emissiveMap: tex, emissive: new THREE.Color(0xffffff), emissiveIntensity: 0.55,
       });
     } else {
       mat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
