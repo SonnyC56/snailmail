@@ -69,11 +69,9 @@ export class Level {
 
     this.cam = new ChaseCamera(ctx.camera, this.track);
 
-    // Cinematic level-start: swing the camera around to Turbo's face while he
-    // does his talk animation and delivers the "need for speed" line, then
-    // settle into the chase as the countdown runs out.
-    this.cam.startIntro(1.1, 1.9);
-    this.player._introPose = true;
+    // Cinematic level-start intro is DEFERRED — the host (Game) calls
+    // beginIntro() only after Turbo's real game mesh is loaded + on screen, so
+    // the face-cut never shows the procedural placeholder.
     this._introVoiceDone = false;
 
     this.enemyShots = [];
@@ -399,6 +397,16 @@ export class Level {
   }
 
   // ------------------------------------------------------------------
+  /** Start the level-intro fly-around (camera swings to Turbo's face + talk pose
+   *  + voice). Called by Game ONCE the real Turbo mesh is on screen. Idempotent. */
+  beginIntro() {
+    if (this._introBegun) return;
+    this._introBegun = true;
+    this.cam.startIntro(1.1, 1.9);
+    this.player._introPose = true;
+    this._introVoiceDone = false;
+  }
+
   update(dt, input) {
     switch (this.status) {
       case RunStatus.COUNTDOWN: this._updateCountdown(dt); break;

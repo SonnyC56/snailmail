@@ -33,6 +33,14 @@ export class Game {
     this._lostHandled = false;
 
     this._wireScreens();
+    // Leaving fullscreen pauses the game: when the page is fullscreen the browser
+    // swallows the Esc keydown to exit fullscreen (it never reaches our handler),
+    // so the user's Esc would otherwise leave fullscreen WITHOUT pausing.
+    const onFsChange = () => {
+      if (!document.fullscreenElement && !document.webkitFullscreenElement && this.state === State.PLAYING) this.pause();
+    };
+    document.addEventListener('fullscreenchange', onFsChange);
+    document.addEventListener('webkitfullscreenchange', onFsChange);
     this.online = null; // set by multiplayer module
   }
 
@@ -89,8 +97,7 @@ export class Game {
     this.level = new Level(this.ctx, level, 'procedural', { lives: 3 });
     this.level.onEvent = (t, p) => this.onLevelEvent(t, p);
     this.ctx.audio.playMusic(themeFor(level).musicWorld ?? 0);
-    this.state = State.PLAYING;
-    this.screens.hide();
+    this._revealLevel();
   }
 
   /** The guided original Tutorial: replay TUTORIAL.TXT with its timed voice. */
@@ -105,8 +112,7 @@ export class Game {
     this.level.onEvent = (t, p) => this.onLevelEvent(t, p);
     this.tutorialGuide = new TutorialGuide(TUTORIAL_STEPS, this.ctx.audio);
     this.ctx.audio.playMusic(themeFor(level).musicWorld ?? 0);
-    this.state = State.PLAYING;
-    this.screens.hide();
+    this._revealLevel();
   }
 
   /** The original Challenge level — one fast, slug-heavy survival run. */
@@ -120,8 +126,7 @@ export class Game {
     this.level = new Level(this.ctx, level, 'challenge', { lives: 3 });
     this.level.onEvent = (t, p) => this.onLevelEvent(t, p);
     this.ctx.audio.playMusic(themeFor(level).musicWorld ?? 0);
-    this.state = State.PLAYING;
-    this.screens.hide();
+    this._revealLevel();
   }
 
   beginLevelFlow(gi, li) {
@@ -159,8 +164,7 @@ export class Game {
     this.level.onEvent = (t, p) => this.onLevelEvent(t, p);
 
     this.ctx.audio.playMusic(themeFor(level).musicWorld ?? 0);
-    this.state = State.PLAYING;
-    this.screens.hide();
+    this._revealLevel();
   }
 
   /** Build a race level for online play (shared level id + seed). */
@@ -177,6 +181,7 @@ export class Game {
     this.ctx.audio.playMusic(themeFor(level).musicWorld ?? 0);
     this.state = State.PLAYING;
     this.screens.hide();
+    this.level.beginIntro();   // race is server-synced; reveal immediately
     this.online?.attachLevel(this.level);
   }
 
@@ -186,6 +191,28 @@ export class Game {
     const hud = new HUD(this.hudRoot);
     hud.onPause = () => { if (this.state === State.PLAYING) this.pause(); else if (this.state === State.PAUSED) this.resume(); };
     return hud;
+  }
+
+  /** Hold a loading veil over the freshly-built level until BOTH the loading bar
+   *  has played AND Turbo's REAL game mesh is on screen, then reveal + start the
+   *  intro fly-around. This guarantees the level / face-cut never shows the
+   *  procedural placeholder (the HD pack can briefly starve the snail's meshes). */
+  _revealLevel() {
+    let barDone = false, meshReady = false, done = false;
+    const reveal = () => {
+      if (done || !barDone || !meshReady) return;
+      done = true;
+      this.screens.hide();
+      this.state = State.PLAYING;
+      this.level?.beginIntro?.();
+    };
+    this.screens.showLoading(() => { barDone = true; reveal(); });
+    const ready = this.level?.player?.snail?.ready;
+    if (ready && typeof ready.then === 'function') {
+      ready.then(() => { meshReady = true; reveal(); });
+      setTimeout(() => { meshReady = true; reveal(); }, 4000);   // slow/failed load → reveal anyway
+    } else { meshReady = true; }
+    setTimeout(() => { barDone = true; meshReady = true; reveal(); }, 6000); // absolute safety net
   }
 
   _teardownLevel() {
@@ -289,8 +316,7 @@ export class Game {
   }
   resume() {
     if (this.state !== State.PAUSED) return;
-    this.state = State.PLAYING;
-    this.screens.hide();
+    this._revealLevel();
   }
 
   // ---- results -----------------------------------------------------

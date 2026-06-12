@@ -253,32 +253,34 @@ export function buildSnail(colors = SNAIL_COLORS) {
     thrustMesh: null,        // JETPACKTHRUST flame (3-frame loop)
     thrustGeos: [],
   };
+  // Resolves when Turbo's REAL game mesh (the BASE frame) is loaded + on screen,
+  // so callers can hold the level intro until it's visible — never the placeholder.
+  state.ready = new Promise((res) => { state._readyResolve = res; });
 
   // collect every frame basename we need so we can preload geometries
   const allFrames = new Set();
   for (const a of Object.values(TURBO_ANIMS)) for (const f of a.frames) allFrames.add(f);
 
   async function loadTurbo() {
-    let firstGeo = null;
-    for (const name of allFrames) {
-      try {
-        const geo = await xloader.geometry('X', name);
-        state.geometries.set(name, geo);
-        if (!firstGeo) { firstGeo = geo; }
-      } catch (err) { /* skip a frame that fails */ }
+    // Load the BASE frame FIRST and show the real mesh immediately — never sit on
+    // the procedural placeholder while ~50 animation frames stream in (the HD
+    // texture pack can starve a long SEQUENTIAL load, which used to leave the
+    // placeholder up through the whole intro). The rest then load in PARALLEL.
+    let baseGeo = null;
+    try { baseGeo = await xloader.geometry('X', 'TURBO-BASE-000'); } catch { /* fall through */ }
+    if (!baseGeo) {
+      // BASE missing → grab any frame as a fallback so Turbo still appears
+      for (const name of allFrames) {
+        try { baseGeo = await xloader.geometry('X', name); state.geometries.set(name, baseGeo); break; } catch { /* skip */ }
+      }
     }
-    if (!firstGeo) return; // total failure → keep procedural Turbo
+    if (!baseGeo) { state._readyResolve?.(); return; } // total failure → keep procedural Turbo
+    state.geometries.set('TURBO-BASE-000', baseGeo);
 
-    // one shared textured material for the body
-    const texName = (firstGeo.userData.texture || 'SNAIL-TURBO.TGA').replace(/\.[^.]+$/, '').toUpperCase();
-    // Opaque body material — alphaTest was clipping the eye highlights and the
-    // body never needs transparency.
-    state.material = new THREE.MeshLambertMaterial({
-      map: assets.texture(`X/${texName}`),
-      side: THREE.DoubleSide,
-    });
-
-    const baseGeo = state.geometries.get('TURBO-BASE-000') || firstGeo;
+    // one shared textured material for the body (alphaTest was clipping the eye
+    // highlights and the body never needs transparency).
+    const texName = (baseGeo.userData.texture || 'SNAIL-TURBO.TGA').replace(/\.[^.]+$/, '').toUpperCase();
+    state.material = new THREE.MeshLambertMaterial({ map: assets.texture(`X/${texName}`), side: THREE.DoubleSide });
     state.mesh = new THREE.Mesh(baseGeo, state.material);
     turbo.add(state.mesh);
 
@@ -287,15 +289,19 @@ export function buildSnail(colors = SNAIL_COLORS) {
     proc.visible = false;       // hide the placeholder body
     procWeapon.visible = false; // hide the placeholder barrel (weapon mesh takes over)
     applyPoseFrame(0);
-
-    // Ground Turbo so his foot rests EXACTLY on the track. Measuring only the
-    // BASE bbox left a submesh below the measured low point (a brief float on
-    // load, then a snap below the road). Instead measure the FULL assembled,
-    // scaled model — every submesh of every loaded pose frame — and lift the
-    // group so the true lowest point sits at y=0. This is computed once at load.
+    // Ground Turbo so his foot rests EXACTLY on the track (full assembled bounds).
     groundTurbo();
-
     if (state.weaponLevel >= 0) mountWeapon(state.weaponLevel);
+    state._readyResolve?.();    // the real game mesh is now on screen
+
+    // background: stream the remaining animation frames in PARALLEL (the snail
+    // animates from BASE until they arrive). Re-ground in case a later frame
+    // extends lower than BASE.
+    const rest = [...allFrames].filter((n) => n !== 'TURBO-BASE-000');
+    await Promise.all(rest.map(async (name) => {
+      try { state.geometries.set(name, await xloader.geometry('X', name)); } catch { /* skip a frame */ }
+    }));
+    groundTurbo();
   }
 
   /** Lift `turbo` so the lowest point of the FULL assembled model rests exactly
@@ -447,6 +453,7 @@ export function buildSnail(colors = SNAIL_COLORS) {
 
   return {
     group,
+    ready: state.ready,   // resolves when Turbo's real game mesh is on screen
     parts: { body: proc, head, stalks, shellGroup, bagGroup, cannon, flash },
     /** Set the active animation pose: base|move|bob|damaged|fall|shell. */
     setPose(pose) {

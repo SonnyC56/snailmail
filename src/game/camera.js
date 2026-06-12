@@ -43,8 +43,8 @@ export class ChaseCamera {
 
   update(dt, player) {
     const track = this.track;
-    const behind = 2.7;   // tight chase — sit right behind Turbo
-    const height = 2.9;
+    const behind = 1.4;   // very tight chase — right on Turbo's tail
+    const height = 2.2;
 
     // sample a point behind the player along the track for a stable anchor
     const camS = Math.max(0, player.s - behind);
