@@ -1,0 +1,94 @@
+{
+  "_comment": "Closed-form parametric formulas for each Snail Mail curve factory, recovered by reading the FPU disassembly and verified against Unicorn emulation of the isolated factory (see curve_points.json for sampled control points). i = control-point index, N = point count, t = i/(N-1) unless noted. Every factory writes the centerline POSITION at control-point +0x30/+0x34/+0x38 = (X,Y,Z). Y baseline rail = 0.49 for flat curves; Z advances ~1 unit/point (forward). Lateral motion is in X; vertical loops are in Y; roll/banking is applied at RUNTIME (see descriptor_table.json runtime_shaper_chain).",
+
+  "factories": {
+    "LOOPTHELOOP": {
+      "addr": "0x41b0d0", "index": 0, "family": "loop",
+      "count": "ftol(size*2pi)+14   (7 lead-in + circle + 7 lead-out)",
+      "shape": "vertical loop-the-loop. Lead-in/out are straight ramps; the middle traces a vertical circle of radius ~= amp in the X-Y plane. Emulated (size=6): X[-2.5,2.5], Y[0,11.76] (rises and inverts), Z 0..13.",
+      "lead_in_X": "(arg*0.5 - 4.0) - i*(1/7)*slope",
+      "lead_out_X": "(arg*0.5 - 4.0) + (1 - i/6)*slope",
+      "circle": "X += sin(t/2 + 3pi/2)*amp ; Y,Z trace the vertical circle, t = i*2pi/r",
+      "constants": {"slope": "0.3 when arg==4 else 0", "1/7": 0.142857, "1/6": 0.166667, "3pi/2": 4.71239}
+    },
+    "LOOPBOW": { "addr": "0x42ba60", "index": 0, "family": "loop", "shape": "same as LOOPTHELOOP (idx0), bowed variant. Emulated identical: X[-2.5,2.5] Y[0,11.76]." },
+    "LOOPTHELOOPW": { "addr": "0x41bb20", "index": 6, "family": "loop", "shape": "wide loop. Emulated (size=8): X[-2.3,2.3], Y[0,15.92] (taller), Z dips to -0.94 (overhang). N=64." },
+    "LOOPOUT": { "addr": "0x41c5d0", "index": 25, "family": "loop", "shape": "loop that dips BELOW grade. Emulated: X[-2.3,2.36], Y[-5.73,0], Z 0..13. N=32." },
+
+    "HUMP": {
+      "addr": "0x41d010", "index": 16, "family": "hill",
+      "count": "ftol(size)+14", "amplitude_arg": "internal amp = 4*arg",
+      "shape": "raised-cosine bump. The factory's centerline X tapers (cos) and the vertical hump is ALSO added at runtime via the hill-bump gate (idx 16). Emulated lateral X[-3.5,3.5].",
+      "formula_Y": "Y(i) = (1 - cos(2*pi*i/r)) * (0.095493*r) * (4*arg)",
+      "runtime_hill_bump": "vertY += (0.5 - 0.5*cos(2*pi*t))*0.35  (gated, idx 16)"
+    },
+    "DUMP": { "addr": "0x41da10", "index": 17, "family": "valley", "shape": "HUMP negated (fchs): a downward dip. Y(i) = -(1 - cos(2*pi*i/r))*(0.095493*r)*(4*arg). Emulated X[-3.5,3.5]." },
+    "DIP": { "addr": "0x41e420", "index": 20, "family": "valley", "shape": "gentle dip. Emulated: X=0, Y[-1.91,0], Z 0..21. N=22." },
+
+    "SCREW": {
+      "addr": "0x41ed80", "index": 21, "family": "corkscrew",
+      "count": "intarg+8", "shape": "tight lateral screw. One full sine cycle. Emulated X[-0.5,0.5], Z 0..23, N=24.",
+      "formula_X": "X(i) = 0.5*cos(2*pi*i/N)   (then runtime roll spins the cross-section: corkscrew)"
+    },
+    "SLALOM": {
+      "addr": "0x41f740", "index": 22, "family": "slalom",
+      "count": "intarg+8", "shape": "windowed single sine weave. Emulated X[-3.03,3.03], N=32.",
+      "formula_X": "X(i) = 5.0 * sin(2*pi*u) * (1 - |2u-1|),  u=i/N   (one cycle, tapered to zero at ends)"
+    },
+    "SLALOMBIG": { "addr": "0x4221d0", "index": 23, "family": "slalom", "shape": "wider slalom, amp 40/9=4.444, steeper bank (pi/12). X(i) = (40/9)*sin(2*pi*u)*window. Emulated X[-2.69,2.69]." },
+    "SLALOMDOUBLE": { "addr": "0x425030", "index": 32, "family": "slalom", "count": 70, "shape": "TWO sine cycles (4pi) over 70 points + gentle longitudinal S, amp 40/9. Emulated X[-3.46,3.46], Y[0,2], Z 0..69." },
+    "SWEEP": { "addr": "0x422be0", "index": 28, "family": "slalom", "count": 30, "shape": "single sweep. Emulated X[-2,2], Y[-0.3,0], Z 0..29." },
+    "SNAKE": { "addr": "0x423560", "index": 29, "family": "slalom", "count": 27, "amplitude_arg": "2.0", "shape": "snaking weave with vertical wobble. Emulated X[0,2], Y[-2,0], Z 0..26." },
+    "WIBBLE": { "addr": "0x428980", "index": 40, "family": "slalom", "count": 32, "shape": "wibble weave. Emulated centerline straight (X applied via runtime roll); Z 0..31." },
+
+    "WORM": {
+      "addr": "0x420150", "index": 24, "family": "flat", "count": 24, "length": 96,
+      "shape": "STRAIGHT tube. Centerline X=0, Y=0.49, Z = 4*i (i=0..23). The worm wiggle is animation applied at runtime, not baked.",
+      "formula": "X=0, Y=0.49, Z=4*i"
+    },
+
+    "START": { "addr": "0x4263e0", "index": 36, "family": "hill", "count": "ftol(size)+? ", "shape": "start ramp, rises. Emulated X=0, Y[0,7.64] (climbs), Z 0..26. Also gated for runtime hill-bump (idx 36)." },
+    "SUPERTRAMP": { "addr": "0x423ef0", "index": 31, "family": "hill", "shape": "trampoline bounce, rises. Emulated Y[0,2.04], Z 0..11.39." },
+
+    "TURNOVER": { "addr": "0x426c90", "index": 37, "family": "invert", "count": 45, "shape": "vertical arc + lateral S (half-turnover). Emulated X[-2.41,2.41], Y[0,4.70], Z 0..44. Runtime roll 180deg." },
+    "TURNOVERDOUBLE": { "addr": "0x427620", "index": 38, "family": "invert", "count": 64, "shape": "double turnover. Emulated X[-2.83,2.83], Y[0,3.57], Z 0..63." },
+    "TURNUNDER": { "addr": "0x427fc0", "index": 39, "family": "invert", "count": 45, "shape": "turnover going under. Emulated X[-2,2], Y[-2.35,0], Z 0..44." },
+    "CAGE2": { "addr": "0x42e700", "index": 15, "family": "invert", "count": 22, "shape": "cage/barrel. Emulated centerline straight (cross-section + roll at runtime), Z 0..21." },
+
+    "INVERT": {
+      "addr": "0x429230", "index": 41, "family": "invert", "count": 34, "length": 34,
+      "shape": "full vertical inversion loop. Tangent rotates by ang=i*pi/16 (one full 2pi over 34). Centerline integrates that tangent. Runtime roll 360deg (cork=true). Emulated +0x30 straight at this seg arg; the loop is in the tangent/frame and the runtime roll.",
+      "formula": "ang = i*pi/16 ; Y += 0.49*sin(ang) ; Z += 0.49*cos(ang)  (vertical circle radius ~2.5)"
+    },
+    "HALFPIPE": {
+      "addr": "0x429b00", "index": 42, "family": "halfpipe", "count": 66, "length": 66,
+      "shape": "STRAIGHT road with a U-shaped cross-section. The +0xa0 PROFILE is the pipe wall radius: starts ~40, narrows to 4.0 at the middle, widens back to ~40 (symmetric). Runtime applies a there-and-back bank (~52deg). Centerline X=0,Y=0,Z=i.",
+      "profile_a0": "h = ((1 - cos(i*0.0625*pi + pi/2)) * 0.5*0.95 + 0.05) * 4.0 ; stored a0 = (h^2 + 16)/(2h)  (circle-sag radius). Emulated a0: 40.1, 33.9, 23.4, 15.7, 11.0, 8.2, 6.5, 5.5, 4.86, ... -> 4.0 -> ... -> 40.1",
+      "constants": {"0.0625": "1/16 step", "0.95": "wall scale", "0.05": "floor", "4.0": "base radius", "16.0": "sag const"}
+    },
+
+    "TWISTERA": {
+      "addr": "0x42a520", "index": 43, "family": "corkscrew", "count": 34, "length": 34,
+      "amplitude_arg": "2.5",
+      "shape": "corkscrew helix, ~1 twist over 34 points. Emulated X = 2.5*cos(phase): -2.5,-2.45,-2.31,-2.08,-1.77,... (clean for interior points). Also gated for runtime hill-bump (idx 43).",
+      "formula": "phase = i*pi/16 (+pi if mirror) ; X = 2.5*cos(phase) ; Z = i ; (twist Y from runtime roll)"
+    },
+    "TWISTER2A": {
+      "addr": "0x42af10", "index": 45, "family": "corkscrew", "count": 52, "length": 52,
+      "amplitude_arg": "2.5",
+      "shape": "double corkscrew, ~2 twists over 52 points. Emulated X[-2.5,2.48] = 2.5*cos(i*2pi/25). Gated for runtime hill-bump (idx 45).",
+      "formula": "phase = i*2pi/25 (+pi if mirror) ; X = 2.5*cos(phase) ; Z = i"
+    }
+  },
+
+  "families_for_track_js": {
+    "_comment": "Maps each curve to the remaster's family model (segments.js pathFamily). Recovered magnitudes to replace the current guesses.",
+    "loop":      { "curves": ["LOOPTHELOOP","LOOPBOW","LOOPTHELOOPW","LOOPOUT"], "vertical_revolution_deg": 360, "apex_height_units": "~11.8 (size 6); ~15.9 (size 8)", "lateral_bow": "+-2.5 (size 6)" },
+    "hill":      { "curves": ["HUMP","HILL","HILL4","HILL4C","SBEND","START","SUPERTRAMP"], "bump_formula": "(0.5 - 0.5*cos(2*pi*t))*0.35", "bump_amp": 0.35 },
+    "valley":    { "curves": ["DUMP","DIP","VALLEY","VALLEY4","VALLEY4C"], "dip_formula": "-(0.5 - 0.5*cos(2*pi*t))*0.35", "dip_amp": 0.35 },
+    "slalom":    { "curves": ["SLALOM","SLALOMBIG","SLALOMDOUBLE","SWEEP","SNAKE","WIBBLE"], "amp_units": "5.0 (SLALOM), 4.44 (SLALOMBIG/DOUBLE), 2.0 (SWEEP/SNAKE)", "cycles": "1 (single), 2 (DOUBLE)", "window": "(1 - |2u-1|) taper to zero at ends" },
+    "corkscrew": { "curves": ["SCREW","TWISTERA","TWISTERB","TWISTER2A","TWISTER2B"], "twist_revolutions": "1 (SCREW/TWISTERA), 2 (TWISTER2A)", "lateral_amp": "0.5 (SCREW), 2.5 (TWISTER)", "runtime_roll_deg": 360 },
+    "invert":    { "curves": ["INVERT","TURNOVER","TURNOVERDOUBLE","TURNUNDER","CAGE2"], "runtime_roll_deg": "360 (INVERT/cork), 180 (TURNOVER bank)", "arc_height_units": "~4.7 (TURNOVER)" },
+    "halfpipe":  { "curves": ["HALFPIPE"], "profile": "U cross-section radius 40->4->40", "runtime_bank_deg": 52, "cork": false }
+  }
+}

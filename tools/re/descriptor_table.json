@@ -1,0 +1,103 @@
+{
+  "_comment": "Snail Mail (2004) per-curve track-geometry RE. Static analysis + Unicorn emulation of isolated factory functions; the binary was NEVER executed as a process. Addresses are file VAs of the non-DRM build. Feeds src/track/track.js.",
+
+  "game_singleton": {
+    "base_pointer_global": "0x4df944",
+    "comment": "The big game object; its address lives at global [0x4df944]. All the '0xff...' offsets below are members of this object (esi/ebx in the disasm)."
+  },
+
+  "descriptor_array": {
+    "base_member_offset": "0xff2914",
+    "alt_base_member_offset": "0xff29bc",
+    "alt_base_delta": "0xa8",
+    "comment": "Each CURVE owns a PAIR of 0xA8-byte descriptor sub-objects (the two halves selected by flag [edx+2]). 0xff29bc = 0xff2914 + 0xa8. Pair stride = 0x150.",
+    "pair_stride": "0x150",
+    "entry_stride": "0xa8",
+    "entry_count": 126,
+    "entry_count_note": "126 = 2 * 63 (registry has 63 slots, 51 named). Default-constructed empty in singleton ctor.",
+    "constructor": {
+      "singleton_ctor": "0x408280",
+      "init_loop_at": "0x408307",
+      "init_loop_code": "lea edi,[esi+0xff2914]; mov ebx,0x7e; @ ecx=edi; call 0x4085e0; add edi,0xa8; dec ebx; jne",
+      "per_descriptor_ctor": "0x4085e0",
+      "per_descriptor_vtable": "0x497338",
+      "note": "The ctor only ZERO-INITS the descriptors. The real per-curve VALUES are written later by the per-curve FACTORY functions (see factories[])."
+    },
+    "selector": {
+      "func": "0x436cda",
+      "formula": "descriptor_addr = curve_index*0x150 + [singleton + 0xff2914]   (or +0xff29bc when [edx+2] set)",
+      "curve_index_source": "[singleton+0x5ccb68]  (written at 0x43657e from [seg+0x844], the relocated parsed curve index)",
+      "stores_chosen_descriptor_at": "[singleton+0x3bfb00]",
+      "reads_model_handle_from": "[descriptor+0x24]  (passed to 0x42f5b0 to install as active renderer model)"
+    }
+  },
+
+  "descriptor_layout_0xA8": {
+    "_comment": "The per-curve descriptor (= the object the runtime shaper calls 'descrB', stored in the array at 0xff2914). Fields verified by reading factory writes and the shaper reads.",
+    "+0x00": "vtable ptr (0x497338)",
+    "+0x24": "model/mesh handle (DirectX .x); installed into renderer when curve becomes active",
+    "+0x38": "CURVE INDEX (0..50). Compared by the hill-bump gate against {8,9,10,14,16,36,43,45}.",
+    "+0x3c": "byte flag (0 on fresh build; 1 on a mirror-clone copy)",
+    "+0x44": "POINT COUNT (number of control points generated)",
+    "+0x4c": "LENGTH (float; = point count for most curves)",
+    "+0x50": "scale (float, usually 1.0)",
+    "+0x54": "saved input arg (the float SIZE/amplitude param the factory was called with)",
+    "+0x58": "ptr to PRIMARY control-point buffer (count * 0xA8 bytes)",
+    "+0x5c": "ptr to SECONDARY (mirror/rail) control-point buffer",
+    "control_point_stride": "0xA8",
+    "control_point_layout": {
+      "+0x00..+0x3c": "4x3 transform matrix; the +0x30/+0x34/+0x38 row is the POSITION (X,Y,Z) of this control point (the authoritative centerline)",
+      "+0x8c": "scale (1.0)",
+      "+0x90/+0x94/+0x98": "raw pre-transform vec (cross-section offset before the per-point frame transform)",
+      "+0x9c": "cross-section scale / radius (1.0 except HALFPIPE)",
+      "+0xa0": "PROFILE param (HALFPIPE: the U-pipe wall radius; 0 for most others)"
+    }
+  },
+
+  "runtime_shaper_chain": {
+    "_comment": "How the runtime walks the descriptor during play (parent struct reached from the rider).",
+    "rider_this": "ebp",
+    "descrA": "[rider+0xc0]  = an EMBEDDED sub-struct at singleton+0x3bb764 (no vtable; interior ptr). Constructor 0x43a9a0.",
+    "descrA_fields": {
+      "+0x70": "current progress position along the curve (init 4.0 at 0x43ad66)",
+      "+0x2dc": "banking accumulator angle (integrated at 0x442903; +=[+0x2e0] rate)",
+      "+0x384": "gate flag byte (==1 when a curve is active; set by installer 0x420c20)",
+      "+0x388": "= descrB ptr (the 0xA8 descriptor from the 0xff2914 array; = [descrC+0x38])",
+      "+0x38c": "= descrC ptr (per-curve record at singleton+0x3bfac8 + i*0x54, type@+0x3c, start@+0x18)",
+      "+0x2964": "lateral delta", "+0x2968": "vert scale", "+0x296c": "forward"
+    },
+    "descrC": "per-curve record array at singleton+0x3bfac8, stride 0x54; +0x18 = segment start offset, +0x3c = type byte, +0x38 = descrB slot",
+    "installer": "0x420c20 (this=descrA+0x384): sets gate=1, descrA+0x388=[descrC+0x38], descrA+0x38c=descrC",
+    "progress_t": "t = ([descrA+0x70] - [descrC+0x18]) / [descrB+0x4c]",
+    "hill_bump": {
+      "block": "0x4462e6",
+      "gate_indices": [8, 9, 10, 14, 16, 36, 43, 45],
+      "gate_names": ["HILL", "HILL4C", "HILL4", "SBEND", "HUMP", "START", "TWISTERA", "TWISTER2A"],
+      "formula": "vertY = (0.5 - 0.5*cos(2*pi*t)) * 0.35",
+      "constants": {"amp": 0.35, "0x49754c": "0.35 hill amp", "0x49729c": "2*pi"}
+    }
+  },
+
+  "master_builders": {
+    "world00_track_builder": "0x40acc0",
+    "comment": "Builds 64 track-segment slots at [singleton+0x1066f2c + n*0x150] by calling per-curve factories with specific args. There are sibling per-world builders for the curve types World00 doesn't use (HILL/VALLEY/SBEND/TOAD/TWISTERB families).",
+    "mirror_clone_helper": "0x421da0",
+    "mirror_clone_note": "thiscall(dst,src): copies +0x38/+0x44/+0x4c/+0x50/+0x54, sets +0x3c=1, NEGATES the X column (fchs) -> a left/right mirrored copy of the previous curve.",
+    "ftol_helper": "0x48b540",
+    "alloc_helper": "0x41b080 (allocates count*0xA8 primary + secondary buffers)"
+  },
+
+  "registry": {
+    "base": "0x4a3d6c",
+    "lookup_func": "0x429ac0",
+    "names_by_index": ["LOOPTHELOOP","LOOPTHELOOP2","LOOPTHELOOP4","LOOPTHELOOPT2","LOOPTHELOOPT3","LOOPTHELOOPT4","LOOPTHELOOPW","LOOPBOW","HILL","HILL4C","HILL4","VALLEY","VALLEY4C","VALLEY4","SBEND","CAGE2","HUMP","DUMP","HUMPSMALL","DUMPSMALL","DIP","SCREW","SLALOM","SLALOMBIG","WORM","LOOPOUT","LOOPOUT3","LOOPOUTBIG","SWEEP","SNAKE","WARP","SUPERTRAMP","SLALOMDOUBLE","P0","P1","P2","START","TURNOVER","TURNOVERDOUBLE","TURNUNDER","WIBBLE","INVERT","HALFPIPE","TWISTERA","TWISTERB","TWISTER2A","TWISTER2B","TOAD0","TOAD1","TOADPAIR0","TOADPAIR1"]
+  },
+
+  "float_constants": {
+    "0x497210": 4.0, "0x497220": 1.0, "0x497228": 0.5, "0x49721c": 3.14159265,
+    "0x49729c": 6.28318548, "0x497440": 1.57079637, "0x4972b0": 0.95, "0x4974d4": 0.05,
+    "0x4974d8": 0.0625, "0x49737c": 16.0, "0x4973e8": 0.49, "0x49754c": 0.35,
+    "0x497284": 5.0, "0x497488": 4.44444, "0x4974c8": 0.19635, "0x4974dc": 0.251327,
+    "0x49745c": 4.71239, "0x497474": 0.095493, "0x49749c": 12.56637, "0x4974a0": 0.016129
+  }
+}
