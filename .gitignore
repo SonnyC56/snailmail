@@ -13,5 +13,10 @@ extracted/
 public/assets/
 public/assets-hd/
 assets-hd/
-.game/          # downloaded game zip + its extraction (install.sh)
-.venv/          # local Python venv for the HD upscaler (install.sh)
+# downloaded game zip + its extraction (install.sh)
+.game/
+# local Python venv for the HD upscaler (install.sh)
+.venv/
+# local Python CUDA venv for Real-ESRGAN super-resolution (tools/sr_upres.py)
+.venv-sr/
+__pycache__/
