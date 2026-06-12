@@ -43,8 +43,8 @@ export class ChaseCamera {
 
   update(dt, player) {
     const track = this.track;
-    const behind = 2.1;   // close chase, but with a little room behind Turbo
-    const height = 2.4;
+    const behind = 2.8;   // balanced resting distance — room behind Turbo, not far
+    const height = 2.6;
 
     // sample a point behind the player along the track for a stable anchor
     const camS = Math.max(0, player.s - behind);
@@ -76,8 +76,10 @@ export class ChaseCamera {
       this._initialized = true;
     }
 
-    // smoothing — snappier when falling/crashed so the camera keeps up
-    const posLerp = player.doomed ? 0.06 : 1 - Math.pow(0.0006, dt);
+    // smoothing — a TIGHT follow (time constant ~0.05s) so the camera stays right
+    // behind Turbo as he accelerates instead of trailing far back; looser/slower
+    // only when doomed (crash) for a dramatic beat.
+    const posLerp = player.doomed ? 0.06 : 1 - Math.pow(1e-10, dt);
     const lookLerp = 1 - Math.pow(0.0001, dt);
     this._pos.lerp(desired, posLerp);
     this._look.lerp(lookTarget, lookLerp);
@@ -109,10 +111,13 @@ export class ChaseCamera {
       const a = e * Math.PI;                       // 0 = front (face) → π = behind
       const frP = track.frameAt(player.s);
       const pp = player.group.position;
+      // the swoop sits FURTHER out for the face cut (more room on Turbo), then
+      // eases in to the normal chase distance by the time it settles behind him.
+      const r = lerp(4.0, behind, e);
       const orbit = pp.clone()
-        .addScaledVector(frP.tangent, Math.cos(a) * behind)
-        .addScaledVector(frP.side, Math.sin(a) * behind * 0.55)
-        .addScaledVector(playerNormal, lerp(1.7, height, e));
+        .addScaledVector(frP.tangent, Math.cos(a) * r)
+        .addScaledVector(frP.side, Math.sin(a) * r * 0.55)
+        .addScaledVector(playerNormal, lerp(2.0, height, e));
       const orbitLook = pp.clone()
         .addScaledVector(playerNormal, lerp(1.1, 0.5, e))
         .addScaledVector(frP.tangent, lerp(-0.5, 6, e));

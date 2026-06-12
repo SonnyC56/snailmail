@@ -406,6 +406,8 @@ export class Track {
     const road = this.cells ? this._buildGridRoad(theme) : this._buildRibbon(theme);
     this._roadMat = road.material;          // kept for the endless-mode colour drift
     group.add(road);
+    const apron = this._buildStartApron();   // lead-in behind start + run-out past finish
+    if (apron) group.add(apron);
     group.add(this._buildEdges(theme));
     const warnings = this._buildGapWarnings(theme);
     if (warnings) group.add(warnings);
@@ -604,6 +606,40 @@ export class Track {
   }
 
   /** Glowing trim tubes running along both edges of the ribbon. */
+  /** Flat road apron extending BEHIND the start and PAST the finish so Turbo
+   *  doesn't appear to hang off the track edge at level start (and a run-out
+   *  reads at the end). Purely visual: straight extrapolation from the end frames
+   *  along their tangent, textured like the road. */
+  _buildStartApron() {
+    if (!this._roadMat) return null;
+    const group = new THREE.Group();
+    const APRON = 36, STEP = 4;
+    const hw = this.cells ? GRID_X_EDGE : (this.halfWidth - 0.4);
+    const strip = (s0, sign) => {
+      const fr = this.frameAt(s0);
+      const positions = [], uvs = [], indices = [];
+      for (let i = 0; i <= APRON; i += STEP) {
+        const c = fr.pos.clone().addScaledVector(fr.tangent, sign * i).addScaledVector(fr.up, -0.02);
+        const L = c.clone().addScaledVector(fr.side, -hw);
+        const R = c.clone().addScaledVector(fr.side, hw);
+        const bi = positions.length / 3;
+        positions.push(L.x, L.y, L.z, R.x, R.y, R.z);
+        const v = (s0 + sign * i) * 0.05;
+        uvs.push(0, v, 1, v);
+        if (i > 0) indices.push(bi - 2, bi - 1, bi, bi - 1, bi + 1, bi);
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+      geo.setIndex(indices);
+      geo.computeVertexNormals();
+      return new THREE.Mesh(geo, this._roadMat);
+    };
+    group.add(strip(0, -1));            // lead-in behind the start
+    group.add(strip(this.length, 1));   // run-out past the finish
+    return group;
+  }
+
   _buildEdges(theme) {
     const group = new THREE.Group();
     const railMat = new THREE.MeshBasicMaterial({ color: theme.rail });
