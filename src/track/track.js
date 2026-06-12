@@ -112,6 +112,12 @@ export class Track {
     this.cells = def.cells ?? null;
     this.rowUnits = def.rowUnits ?? 2.7;
 
+    // The slipstream BARRIER wall sits at a FIXED width (always the widest the
+    // track can be, a touch outside), the same on the left and the right — it
+    // never hugs a narrow/ledge section, so you fall off skinny stretches and
+    // through interior holes; it only stops you at the absolute outer edge.
+    this.wallX = this.cells ? (GRID_X_EDGE + 0.5) : (this.halfWidth + 0.4);
+
     this._buildPath(def);
     this._buildFrames(def);
   }
@@ -408,8 +414,8 @@ export class Track {
     group.add(road);
     const apron = this._buildStartApron();   // lead-in behind start + run-out past finish
     if (apron) group.add(apron);
-    const slide = this._buildSlideEdges(theme);   // original yellow/red chevron road edge
-    if (slide) group.add(slide);
+    const sides = this._buildRoadSides(theme);   // beveled side faces (road thickness)
+    if (sides) group.add(sides);
     group.add(this._buildEdges(theme));
     const warnings = this._buildGapWarnings(theme);
     if (warnings) group.add(warnings);
@@ -645,87 +651,88 @@ export class Track {
     return group;
   }
 
-  /** The original yellow/red chevron road-EDGE texture (Slide0..3): a band along
-   *  each drivable edge, textured with the level's slide skin, so the road reads
-   *  with the original's hazard-chevron edges. Follows the per-row drivable extent
-   *  and breaks at gaps. Self-illuminated like the road so it stays bright. */
-  _buildSlideEdges(theme) {
-    if (!theme.slideTex) return null;
-    const tex = assets.texture(theme.slideTex, { wrap: true });
+  /** Beveled SIDE faces that give the road visible thickness — the original
+   *  track isn't a paper-thin ribbon; its edges chamfer down into a solid dark
+   *  band. We sweep a small vertical profile (a chamfer out + a skirt down) along
+   *  each drivable edge, following the per-row extent and breaking at gaps. Solid
+   *  dark material (no chevrons — those live on the jump ramps now). */
+  _buildRoadSides(theme) {
+    const sideCol = new THREE.Color(theme.surfaceEdge ?? theme.rail ?? 0x222a44);
     const mat = new THREE.MeshLambertMaterial({
-      map: tex, side: THREE.DoubleSide,
-      emissiveMap: tex, emissive: new THREE.Color(0xffffff), emissiveIntensity: 0.5,
+      color: sideCol, side: THREE.DoubleSide,
+      emissive: sideCol, emissiveIntensity: 0.22,
     });
+    // Vertical profile relative to the road edge: [lateralOut, vertical].
+    // A short chamfer out, then a skirt straight down → a bold beveled lip.
+    const PROFILE = [[0, -0.01], [0.18, -0.16], [0.18, -0.72]];
     const group = new THREE.Group();
-    const EW = 1.1;            // width of the chevron edge band
     for (const which of ['min', 'max']) {
-      const positions = [], uvs = [], indices = [];
+      const sign = which === 'min' ? -1 : 1;   // outward direction in x
+      const positions = [], normals = [], indices = [];
       let prev = false;
       for (let s = 0; s <= this.length; s += RING_STEP) {
         const ext = this.drivableExtent(s);
         if (!ext) { prev = false; continue; }
         const fr = this.frameAt(s);
         const edge = which === 'min' ? ext.min : ext.max;
-        const inner = which === 'min' ? edge + EW : edge - EW;
-        const pe = fr.pos.clone().addScaledVector(fr.side, edge).addScaledVector(fr.up, 0.02);
-        const pi = fr.pos.clone().addScaledVector(fr.side, inner).addScaledVector(fr.up, 0.02);
         const bi = positions.length / 3;
-        positions.push(pi.x, pi.y, pi.z, pe.x, pe.y, pe.z);
-        const v = s * 0.2;     // chevrons repeat along the edge
-        uvs.push(v, 0, v, 1);
-        if (prev) indices.push(bi - 2, bi - 1, bi, bi - 1, bi + 1, bi);
+        for (const [out, dy] of PROFILE) {
+          const p = fr.pos.clone()
+            .addScaledVector(fr.side, edge + sign * out)
+            .addScaledVector(fr.up, dy);
+          positions.push(p.x, p.y, p.z);
+          const n = fr.side.clone().multiplyScalar(sign);
+          normals.push(n.x, n.y, n.z);
+        }
+        if (prev) {
+          const N = PROFILE.length;
+          for (let k = 0; k < N - 1; k++) {
+            const a = bi - N + k, b = bi - N + k + 1, c = bi + k, d = bi + k + 1;
+            indices.push(a, c, b, b, c, d);
+          }
+        }
         prev = true;
       }
       if (positions.length) {
         const geo = new THREE.BufferGeometry();
         geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-        geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+        geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
         geo.setIndex(indices);
-        geo.computeVertexNormals();
         group.add(new THREE.Mesh(geo, mat));
       }
     }
     return group;
   }
 
+  /** The glowing blue slipstream WALL that stops you from sailing off the sides.
+   *  ONE faded blue band per side, at a FIXED outer width (±this.wallX) — the same
+   *  on the left and the right, set a touch outside the widest the track ever gets.
+   *  It is NOT a guard rail that hugs the road: it only catches you at the absolute
+   *  outer edge, so a narrow stretch or an interior hole still drops you. It breaks
+   *  only at a FULL gap (a jump), never on a per-row ledge. (No white rail line — a
+   *  single faded blue glow, per the original.) */
   _buildEdges(theme) {
     const group = new THREE.Group();
-    const railMat = new THREE.MeshBasicMaterial({ color: theme.rail });
-    // Original BARRIER side-rail texture on the slipstream walls. The walls hug
-    // the road's TRUE edge and BREAK at every drop — full gaps AND the open side
-    // of a ledge (where the road falls away) — so you can ride off the edge and
-    // fall there instead of being channelled cleanly around the hole.
     const barrierTex = assets.texture('OBJECTS/BARRIER/BARRIER', { wrap: true });
-    // ADDITIVE so the barrier reads as a glowing blue slipstream wall: the
-    // texture's black areas add nothing (clear), the lit areas glow blue. (Normal
-    // blending showed the texture's black background as solid black bars.)
+    // ADDITIVE so the barrier reads as a translucent glowing slipstream wall: the
+    // texture's black areas add nothing, the lit areas glow blue. Faded (low
+    // opacity) so it's a soft hint of a wall, not a solid bar.
     const wallMat = new THREE.MeshBasicMaterial({
-      map: barrierTex, color: 0x6ab4ff, transparent: true, opacity: 0.85,
+      map: barrierTex, color: 0x5aa6ff, transparent: true, opacity: 0.42,
       side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending,
     });
-    const WALL_H = 1.15;
+    const WALL_H = 1.05;
     for (const which of ['min', 'max']) {
-      let pts = [];
+      const wx = which === 'min' ? -this.wallX : this.wallX;
       const positions = [], uvs = [], indices = [];
-      const flushTube = () => {
-        if (pts.length > 1) {
-          const curve = new THREE.CatmullRomCurve3(pts);
-          const geo = new THREE.TubeGeometry(curve, Math.max(8, pts.length * 2), 0.14, 5, false);
-          group.add(new THREE.Mesh(geo, railMat));
-        }
-        pts = [];
-      };
       let prev = false;
       for (let s = 0; s <= this.length; s += RING_STEP * 2) {
-        const ext = this.barrierExtent(s);
-        // break the barrier at a full gap OR on the open (drop) side of a ledge
-        const open = !ext || (which === 'min' ? ext.minOpen : ext.maxOpen);
-        if (open) { flushTube(); prev = false; continue; }
+        // break ONLY at a full gap (no road at all across this row) — the wall is
+        // a constant-width fence, it does not follow the road in or out.
+        if (!this.drivableExtent(s)) { prev = false; continue; }
         const fr = this.frameAt(s);
-        const ex = which === 'min' ? ext.min : ext.max;
-        const base = fr.pos.clone().addScaledVector(fr.side, ex);
+        const base = fr.pos.clone().addScaledVector(fr.side, wx);
         const top = base.clone().addScaledVector(fr.up, WALL_H);
-        pts.push(top.clone());
         const bi = positions.length / 3;
         const u = s * 0.12;
         positions.push(base.x, base.y, base.z, top.x, top.y, top.z);
@@ -733,7 +740,6 @@ export class Track {
         if (prev) indices.push(bi - 2, bi - 1, bi, bi - 1, bi + 1, bi);
         prev = true;
       }
-      flushTube();
       if (positions.length) {
         const geo = new THREE.BufferGeometry();
         geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));

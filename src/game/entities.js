@@ -328,8 +328,10 @@ function buildRamp() {
   // the launch end. Surface uses the original ROAD texture so it reads as the
   // road kicking up, not a grey wedge.
   const heightAt = (u) => 0.03 + HI * (u * u);
-  const tex = assets.texture('OBJECTS/WORLD00/TRACK0', { wrap: true });
-  const surfMat = new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide });
+  // the original yellow/red CHEVRON texture (SLIDE0) belongs on the launch ramp —
+  // the chevrons point up the ramp in the launch direction.
+  const tex = assets.texture('OBJECTS/WORLD00/SLIDE0', { wrap: true });
+  const surfMat = new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide, emissiveMap: tex, emissive: new THREE.Color(0xffffff), emissiveIntensity: 0.5 });
   const pos = [], uv = [], idx = [];
   for (let i = 0; i <= N; i++) {
     const u = i / N, z = back - u * LEN, y = heightAt(u);

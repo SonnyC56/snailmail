@@ -21,9 +21,6 @@ const STEER_DAMP = 9;
 const AIR_STEER = 60;          // lateral air-control accel (full mid-flight steering)
 const MOUSE_TRACK = 0.000002;  // mouse position-follow rate (lower = snappier; ~0.07s lag)
 const METER_MAX = 100;
-// How far past the drivable edge you may drift on an OPEN (ledge/drop) side
-// before the surface check drops you — lets you ride off a ledge into the void.
-const EDGE_DRIFT = 5.5;
 
 // weapon chain: index → { name, cooldown, shots, damage, invincible }
 export const WEAPONS = [
@@ -216,17 +213,14 @@ export class Player {
     this._steer(dt, input);
     this._tryFire(input);
 
-    // Side barriers (slipstream walls) only hold you where the road meets its
-    // TRUE edge. On an OPEN side — a ledge or hole where the road falls away —
-    // there is no wall, so you can drift off the edge and fall. Any hole IN the
-    // road still drops you too.
-    const ext = this.track.barrierExtent(this.s);
-    if (!ext) { this._startFall(); return; }            // whole row void → fall
-    const lo = ext.minOpen ? -EDGE_DRIFT : ext.min;     // open side → drift out to the void & fall
-    const hi = ext.maxOpen ?  EDGE_DRIFT : ext.max;
-    if (this.x < lo) { this.x = lo; this.xVel = Math.max(0, this.xVel); }
-    else if (this.x > hi) { this.x = hi; this.xVel = Math.min(0, this.xVel); }
-    // hole within the road (no barrier over a hole) → fall through it
+    // The slipstream wall is a FIXED-width fence at ±wallX (the same on both
+    // sides, just outside the widest the track ever gets). It only catches you
+    // at the absolute outer edge — clamp there. Anywhere the road has fallen
+    // away under you — a narrow stretch, an interior hole, or a full gap — you
+    // drop, because the wall does not hug the road in.
+    const wall = this.track.wallX;
+    if (this.x < -wall) { this.x = -wall; this.xVel = Math.max(0, this.xVel); }
+    else if (this.x > wall) { this.x = wall; this.xVel = Math.min(0, this.xVel); }
     if (!this.track.hasSurface(this.s, this.x)) { this._startFall(); return; }
   }
 
